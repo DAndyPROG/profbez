@@ -7,7 +7,7 @@ sleepApplication = false
 restartPolicyType = "ON_FAILURE"
 healthcheckPath = "/ping"
 healthcheckTimeout = 300
-startCommand = "./entrypoint.sh"
+startCommand = "bash entrypoint.sh"
 
 # Environment variables
 [env]

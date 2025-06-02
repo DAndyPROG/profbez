@@ -1,2 +1,2 @@
 [start]
-cmd = "./entrypoint.sh" 
+cmd = "bash entrypoint.sh" 

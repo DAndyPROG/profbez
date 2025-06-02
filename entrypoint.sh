@@ -3,8 +3,8 @@ set -e
 
 echo "🔧 Entrypoint script starting..."
 
-# Убедимся что start.sh исполняемый
-chmod +x start.sh
+# Убедимся что start.sh исполняемый (хотя будем запускать через bash)
+chmod +x start.sh || echo "chmod failed, will use bash directly"
 
-# Запускаем основной скрипт
-exec ./start.sh 
+# Запускаем основной скрипт через bash
+exec bash start.sh 
