@@ -176,7 +176,7 @@ cython_debug/
 .pypirc
 
 # Railway deployment files
-.railway/
+# .railway/ - commented out so .railway/Procfile is included
 *.railway-*
 
 # Environment files

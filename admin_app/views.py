@@ -26,7 +26,18 @@ import re
 
 def health_check(request):
     """Simple health check endpoint for Railway"""
-    return HttpResponse("OK", status=200)
+    try:
+        # Basic health check
+        from django.db import connection
+        cursor = connection.cursor()
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+        cursor.close()
+        
+        return HttpResponse("OK - Database connected", status=200)
+    except Exception as e:
+        # Return OK even if database is not ready during startup
+        return HttpResponse(f"OK - Starting up (DB: {str(e)[:50]}...)", status=200)
 
 def index(request):
     form = IngenerInfoForm()
