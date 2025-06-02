@@ -4,7 +4,7 @@ echo "🚀 Starting Railway deployment..."
 
 # Wait for database to be ready
 echo "⏳ Waiting for database..."
-python manage.py check --database default
+python manage.py wait_for_db
 
 # Collect static files
 echo "📁 Collecting static files..."
