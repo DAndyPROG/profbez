@@ -5,7 +5,7 @@ builder = "nixpacks"
 numReplicas = 1
 sleepApplication = false
 restartPolicyType = "ON_FAILURE"
-healthcheckPath = "/ping"
+healthcheckPath = "/ping/"
 healthcheckTimeout = 300
 startCommand = "bash entrypoint.sh"
 

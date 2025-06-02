@@ -183,6 +183,9 @@ if 'RAILWAY_ENVIRONMENT' in os.environ:
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
+    
+    # Disable APPEND_SLASH for healthcheck to avoid redirects
+    APPEND_SLASH = False
 
 # Logging configuration
 LOGGING = {

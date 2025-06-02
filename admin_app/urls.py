@@ -3,8 +3,10 @@ from . import views
 
 urlpatterns = [
     path('', views.index, name='index'),
-    path('health/', views.health_check, name='health_check'),  # Healthcheck endpoint for Railway
-    path('ping/', views.ping, name='ping'),  # Simple ping endpoint without DB
+    path('health', views.health_check, name='health_check_no_slash'),  # Without slash
+    path('health/', views.health_check, name='health_check'),  # With slash
+    path('ping', views.ping, name='ping_no_slash'),  # Without slash  
+    path('ping/', views.ping, name='ping'),  # With slash
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('register/', views.register_view, name='register'),
