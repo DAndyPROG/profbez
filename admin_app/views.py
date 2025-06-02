@@ -12,6 +12,7 @@ from django.http import JsonResponse, HttpResponse
 from django.contrib import messages
 from django.contrib.auth import logout, authenticate, login
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse
 import sys
 import traceback
@@ -24,6 +25,7 @@ from django.conf import settings
 from datetime import date, timedelta
 import re
 
+@csrf_exempt
 def health_check(request):
     """Simple health check endpoint for Railway"""
     try:
@@ -38,6 +40,11 @@ def health_check(request):
     except Exception as e:
         # Return OK even if database is not ready during startup
         return HttpResponse(f"OK - Starting up (DB: {str(e)[:50]}...)", status=200)
+
+@csrf_exempt
+def ping(request):
+    """Simple ping endpoint without database dependency"""
+    return HttpResponse("PONG - Django is running", status=200)
 
 def index(request):
     form = IngenerInfoForm()

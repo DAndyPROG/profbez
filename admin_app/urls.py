@@ -4,6 +4,7 @@ from . import views
 urlpatterns = [
     path('', views.index, name='index'),
     path('health/', views.health_check, name='health_check'),  # Healthcheck endpoint for Railway
+    path('ping/', views.ping, name='ping'),  # Simple ping endpoint without DB
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('register/', views.register_view, name='register'),
