@@ -28,6 +28,12 @@ python manage.py migrate --noinput
 
 echo "✅ Migrations completed!"
 
+# Create superuser
+echo "👤 Creating superuser..."
+python manage.py create_superuser
+
+echo "✅ Superuser setup completed!"
+
 # Check Django configuration
 echo "🔧 Checking Django configuration..."
 python manage.py check
