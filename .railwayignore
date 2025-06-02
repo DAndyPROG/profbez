@@ -1,0 +1,31 @@
+# Development files
+.git/
+.vscode/
+__pycache__/
+*.pyc
+.env*
+.DS_Store
+
+# Documentation
+README.md
+RAILWAY_DEPLOY.md
+RAILWAY_FIX.md
+DEPLOY_CHECKLIST.md
+generate_secret_key.py
+
+# Local database
+db.sqlite3
+*.db
+
+# Media files (should be stored separately in production)
+media/
+
+# Local static files (will be generated during build)
+staticfiles/
+
+# Logs
+*.log
+
+# Temporary files
+tmp/
+temp/ 

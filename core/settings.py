@@ -83,8 +83,13 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Railway PostgreSQL database configuration
 DATABASE_URL = os.environ.get('DATABASE_URL')
 if DATABASE_URL:
+    # Railway production database
     DATABASES = {
-        'default': dj_database_url.parse(DATABASE_URL)
+        'default': dj_database_url.parse(DATABASE_URL, conn_max_age=600)
+    }
+    # Ensure SSL connection for Railway
+    DATABASES['default']['OPTIONS'] = {
+        'sslmode': 'require',
     }
 else:
     # Local development database
@@ -122,7 +127,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/5.0/topics/i18n/
 LANGUAGE_CODE = 'uk-ua'
-TIME_ZONE = 'Europe/Kiev'
+TIME_ZONE = 'Europe/Kyiv'
 USE_I18N = True
 USE_TZ = True
 
