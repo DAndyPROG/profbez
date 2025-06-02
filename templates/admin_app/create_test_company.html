@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Створення тестової компанії{% endblock %}
+{% block header %}
+    <h1>КАБІНЕТ АДМІНІСТРАТОРА</h1>
+{% endblock %}
+{% block nav %}{% endblock %}
+{% block content %}
+    <main>
+        <div class="container">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Створення тестової компанії</h2>
+                </div>
+                <div class="card-body">
+                    {% if messages %}
+                        <div class="messages">
+                            {% for message in messages %}
+                            <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-info{% endif %}">
+                                {{ message }}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    
+                    <p>Ця форма дозволяє створити тестову компанію для використання при імпорті студентів.</p>
+                    
+                    <form method="post" action="{% url 'create_test_company' %}">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label for="company_name">Назва компанії:</label>
+                            <input type="text" id="company_name" name="company_name" class="form-control" required>
+                            <small class="form-text text-muted">Введіть точну назву компанії, яку будете використовувати при імпорті студентів.</small>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <a href="{% url 'students_list' %}" class="btn btn-secondary">Скасувати</a>
+                            <button type="submit" class="btn btn-primary">Створити тестову компанію</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+{% endblock %}
+{% block scripts %}
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+        }
+        
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background-color: #fff;
+        }
+        
+        .card-header {
+            background-color: #f5f5f5;
+            padding: 15px 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .card-header h2 {
+            margin: 0;
+            font-size: 1.5em;
+        }
+        
+        .card-body {
+            padding: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .form-text {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-weight: 500;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .btn-primary {
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background-color: #45a049;
+        }
+        
+        .btn-secondary {
+            background-color: #f1f1f1;
+            color: #333;
+        }
+        
+        .btn-secondary:hover {
+            background-color: #ddd;
+        }
+        
+        .alert {
+            padding: 12px 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .alert-danger {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .alert-info {
+            background-color: #e2f3fd;
+            border: 1px solid #b8e0ff;
+            color: #0c5460;
+        }
+    </style>
+{% endblock %} 

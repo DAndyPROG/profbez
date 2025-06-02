@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Видалення слухача{% endblock %}
+{% block header %}
+    <h1>КАБІНЕТ АДМІНІСТРАТОРА</h1>
+{% endblock %}
+{% block nav %}{% endblock %}
+{% block content %}
+    <div class="modal" style="display: block;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Видалення слухача</h2>
+                <a href="{% url 'students_list' %}" class="close">✖</a>
+            </div>
+            <div class="modal-body">
+                <p>Ви впевнені, що хочете видалити слухача <strong>{{ student.user.first_name }} {{ student.user.last_name }}</strong>?</p>
+                <p>Ця дія не може бути скасована.</p>
+                
+                <form action="{% url 'students_delete' student.id %}" method="POST">
+                    {% csrf_token %}
+                    <div class="form-actions">
+                        <a href="{% url 'students_list' %}" class="cancel-btn">Скасувати</a>
+                        <button type="submit" class="delete-btn">Видалити</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block scripts %}
+    <style>
+        /* Modal styles */
+        .modal {
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background-color: #fff;
+            padding: 20px;
+            border: none;
+            border-radius: 5px;
+            width: 50%;
+            max-width: 500px;
+            position: relative;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+        
+        .close {
+            cursor: pointer;
+            font-size: 24px;
+            font-weight: bold;
+            text-decoration: none;
+            color: #333;
+        }
+        
+        .close:hover {
+            color: #f00;
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            padding: 15px 0;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .cancel-btn, .delete-btn {
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            border: none;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+        
+        .cancel-btn {
+            background-color: #f1f1f1;
+            color: #333;
+        }
+        
+        .cancel-btn:hover {
+            background-color: #ddd;
+        }
+        
+        .delete-btn {
+            background-color: #f44336;
+            color: white;
+        }
+        
+        .delete-btn:hover {
+            background-color: #d32f2f;
+        }
+    </style>
+{% endblock %} 

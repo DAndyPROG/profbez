@@ -1,0 +1,701 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Реєстр клієнтів{% endblock %}
+{% block header %}
+    <h1>КАБІНЕТ АДМІНІСТРАТОРА</h1>
+{% endblock %}
+{% block nav %}{% endblock %}
+{% block content %}
+    <main>
+        <div class="controls">
+            <div class="search-controls">
+                <input type="text" id="searchInput" placeholder="Пошук за назвою компанії..." value="{{ search_term }}">
+                <button onclick="searchClients()" class="add-btn green-btn">Пошук</button>
+            </div>
+            <div class="add-controls">
+                <button onclick="addNewClient()" class="add-btn green-btn">➕ Додати клієнта</button>
+            </div>
+        </div>
+        <div class="table-container">
+            <table id="clientsTable">
+                <thead>
+                    <tr>
+                        <th>НАЗВА КОМПАНІЇ</th>
+                        <th>КОД ЄДРПОУ</th>
+                        <th>ПІБ</th>
+                        <th>E-MAIL</th>
+                        <th>ТЕЛЕФОН</th>
+                        <th>№ ДОГОВОРУ</th>
+                        <th>ТЕРМІН ДІЇ ДОГОВОРУ</th>
+                        <th>КІЛЬКІСТЬ СЛУХАЧІВ</th>
+                        <th>ДІЇ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ingener in ingeners %}
+                        <tr {% if ingener.is_new_registration %}style="background-color: #E1F1D1; color: black;"{% endif %} data-client-id="{{ ingener.id }}">
+                            <td {% if ingener.is_new_registration %}style="background-color: #D8E8D8; color: black; border: 1px solid #ddd;"{% endif %}>{{ ingener.company_name }}</td>
+                            <td {% if ingener.is_new_registration %}style="background-color: #D8E8D8; color: black; border: 1px solid #ddd;"{% endif %}>{{ ingener.code_edrpo }}</td>
+                            <td {% if ingener.is_new_registration %}style="background-color: #D8E8D8; color: black; border: 1px solid #ddd;"{% endif %}>{{ ingener.user.first_name }} {{ ingener.user.last_name }}</td>
+                            <td {% if ingener.is_new_registration %}style="background-color: #D8E8D8; color: black; border: 1px solid #ddd;"{% endif %}>{{ ingener.user.email }}</td>
+                            <td {% if ingener.is_new_registration %}style="background-color: #D8E8D8; color: black; border: 1px solid #ddd;"{% endif %}>{{ ingener.user.phone_number }}</td>
+                            <td {% if ingener.is_new_registration %}style="background-color: #D8E8D8; color: black; border: 1px solid #ddd;"{% endif %}>{{ ingener.contract.contract_number }}</td>
+                            <td {% if ingener.is_new_registration %}style="background-color: #D8E8D8; color: black; border: 1px solid #ddd;"{% endif %} class="{{ ingener.contract_status_class }}">
+                                <span class="contract-date">{{ ingener.contract.contract_end_date|date:"d.m.Y" }}</span>
+                                <span class="contract-status">{{ ingener.contract_status_text }}</span>
+                            </td>
+                            <td {% if ingener.is_new_registration %}style="background-color: #D8E8D8; color: black; border: 1px solid #ddd;"{% endif %}>{{ ingener.students.count }}</td>
+                            <td {% if ingener.is_new_registration %}style="background-color: #D8E8D8; color: black; border: 1px solid #ddd;"{% endif %}>
+                                <a href="{% url 'admin_clients_update' ingener.id %}" class="edit-btn" title="Редагувати">✎</a>
+                                <button class="delete-btn" onclick="deleteClient({{ ingener.id }}, '{{ ingener.user.first_name }} {{ ingener.user.last_name }}', '{{ ingener.company_name }}')" title="Видалити">✖</button>
+                            </td>
+                        </tr>  
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Додаємо пагінацію -->
+        <div class="pagination">
+            <span class="step-links">
+                {% if ingeners.has_previous %}
+                    <a href="?page=1{% if search_term %}&search={{ search_term }}{% endif %}">&laquo; Перша</a>
+                    <a href="?page={{ ingeners.previous_page_number }}{% if search_term %}&search={{ search_term }}{% endif %}">Попередня</a>
+                {% endif %}
+
+                <span class="current">
+                    Сторінка {{ ingeners.number }} з {{ ingeners.paginator.num_pages }}
+                </span>
+
+                {% if ingeners.has_next %}
+                    <a href="?page={{ ingeners.next_page_number }}{% if search_term %}&search={{ search_term }}{% endif %}">Наступна</a>
+                    <a href="?page={{ ingeners.paginator.num_pages }}{% if search_term %}&search={{ search_term }}{% endif %}">Остання &raquo;</a>
+                {% endif %}
+            </span>
+        </div>
+    </main>
+    
+    <!-- Модальне вікно для видалення клієнта -->
+    <div id="deleteClientModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Видалити клієнта</h2>
+                <span class="close" onclick="document.getElementById('deleteClientModal').style.display='none'; document.body.classList.remove('modal-open');">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p id="deleteClientMessage">Ви впевнені, що хочете видалити цього клієнта?</p>
+                <form id="deleteClientForm" method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" id="deleteClientId" name="client_id">
+                    <div class="modal-footer">
+                        <div class="form-actions">
+                            <button type="button" class="cancel-btn" id="cancelDeleteClient" onclick="document.getElementById('deleteClientModal').style.display='none'; document.body.classList.remove('modal-open');">Скасувати</button>
+                            <button type="submit" class="delete-btn">Видалити</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальне вікно для додавання нового клієнта -->
+    <div id="addClientModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Додати нового клієнта</h2>
+                <span class="close" onclick="document.getElementById('addClientModal').style.display='none'; document.body.classList.remove('modal-open');">&times;</span>
+            </div>
+            <div class="modal-body">
+                <!-- Показуємо форму або інформацію про пароль залежно від контексту -->
+                {% if show_credentials %}
+                    <div class="alert alert-success">
+                        <h2>Реєстрація успішна!</h2>
+                        <p class="mb-2"><strong>Email:</strong> {{ email }}</p>
+                        <p class="mb-2"><strong>Пароль:</strong> {{ generated_password }}</p>
+                        <p class="mb-3">Будь ласка, збережіть ці дані в надійному місці.</p>
+                    </div>
+                    
+                    <div class="form-actions text-center">
+                        <button type="button" class="cancel-btn" onclick="document.getElementById('addClientModal').style.display='none'; document.body.classList.remove('modal-open');">Закрити</button>
+                    </div>
+                {% else %}
+                    {% comment %} {% if messages %}
+                        <div class="messages">
+                            {% for message in messages %}
+                            <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-danger{% endif %}">
+                                {{ message }}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %} {% endcomment %}
+                    <form id="addClientForm" action="{% url 'admin_clients_create' %}" method="POST">
+                        {% csrf_token %}
+                        <input type="hidden" name="has_form_errors" value="{{ has_form_errors|yesno:'True,False' }}">
+                        <input type="hidden" name="generate_password" value="True">
+                        {% for field in form %}
+                            {% if field.name != 'generate_password' %}
+                                {% if forloop.counter0|divisibleby:2 %}
+                                <div class="form-row">
+                                {% endif %}
+                                    <div class="form-group">
+                                        {{ field.label_tag }}
+                                        {{ field }}
+                                        {% if field.errors %}
+                                        <div class="error-message">
+                                            {% for error in field.errors %}
+                                            {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                {% if forloop.counter|divisibleby:2 or forloop.last %}
+                                </div>
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                        <div class="form-actions">
+                            <button type="button" class="cancel-btn" onclick="document.getElementById('addClientModal').style.display='none'; document.body.classList.remove('modal-open');">Скасувати</button>
+                            <button type="submit" class="add-btn green-btn">Зберегти</button>
+                        </div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальне вікно для повідомлень про пароль -->
+    <div id="passwordInfoModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Інформація про пароль</h2>
+                <span class="close" onclick="closePasswordInfoModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="passwordInfoContent">
+                    <!-- Сюди буде вставлено вміст про пароль -->
+                </div>
+                <div class="modal-footer">
+                    <div class="form-actions">
+                        <button type="button" class="add-btn green-btn" onclick="closePasswordInfoModal()">Закрити</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальне вікно для редагування клієнта -->
+    {% if show_edit_modal %}
+    <div id="editClientModal" class="modal" style="display: block;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Редагувати клієнта</h2>
+                <span class="close" onclick="window.location.href='{% url 'admin_clients_list' %}'">&times;</span>
+            </div>
+            <div class="modal-body">
+                {% comment %} {% if messages %}
+                    <div class="messages">
+                        {% for message in messages %}
+                        <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-danger{% endif %}">
+                            {{ message }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% endif %} {% endcomment %}
+                
+                {% if generated_password %}
+                    <div class="alert alert-success">
+                        <h3>Пароль успішно згенеровано</h3>
+                        <p class="mb-2"><strong>Новий пароль:</strong> <span style="font-weight: bold; font-size: 1.2em; color: #007bff; background-color: #f8f9fa; padding: 2px 6px; border-radius: 3px;">{{ generated_password }}</span></p>
+                    </div>
+                    <div class="modal-footer">
+                        <div class="form-actions">
+                            <button type="button" class="cancel-btn" onclick="window.location.href='{% url 'admin_clients_list' %}'">Закрити</button>
+                        </div>
+                    </div>
+                {% else %}
+                    <form id="editClientForm" method="POST" action="{% url 'admin_clients_update' edit_id %}">
+                        {% csrf_token %}
+                        {% for field in edit_form %}
+                            {% if field.name != 'generate_password' %}
+                                <div class="form-group">
+                                    {{ field.label_tag }}
+                                    {% if field.name == 'contract_end_date' %}
+                                        <input type="date" name="{{ field.name }}" id="{{ field.auto_id }}" 
+                                               value="{{ field.value|date:'Y-m-d' }}" 
+                                               class="form-control {% if field.errors %}is-invalid{% endif %}" required>
+                                    {% else %}
+                                        {{ field }}
+                                    {% endif %}
+                                    {% if field.errors %}
+                                        <div class="error-message">
+                                            {% for error in field.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                    {% endif %}
+                                    {% if field.help_text %}
+                                        <small class="form-text text-muted">{{ field.help_text }}</small>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <div class="form-row">
+                            <div class="form-group password-checkbox" style="display: flex; align-items: center; gap: 10px;">
+                                <input type="checkbox" class="form-check-input" name="generate_password" id="id_new_generate_password">
+                                <label for="id_new_generate_password">Згенерувати новий пароль</label>
+                                <small>Якщо відмічено, для користувача буде згенеровано новий пароль</small>
+                            </div>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="cancel-btn" onclick="window.location.href='{% url 'admin_clients_list' %}'">Скасувати</button>
+                            <button type="submit" class="add-btn green-btn">Зберегти</button>
+                        </div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+{% endblock %}
+{% block scripts %}
+    <script src="{% static 'js/admin_clients.js' %}"></script>
+    <script>
+        // Перевірка завантаження JavaScript
+        console.log('admin_clients.js loaded');
+        
+        // Перевірка доступності функцій, включаючи нові
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('DOM loaded. Checking JS functions:');
+            console.log('addNewClient function available:', typeof addNewClient === 'function');
+            console.log('editClient function available:', typeof editClient === 'function');
+            console.log('deleteClient function available:', typeof deleteClient === 'function');
+            console.log('submitEditForm function available:', typeof submitEditForm === 'function');
+            console.log('closeEditModal function available:', typeof closeEditModal === 'function');
+            
+            // Перевірка наявності модальних вікон
+            console.log('addClientModal exists:', document.getElementById('addClientModal') !== null);
+            console.log('deleteClientModal exists:', document.getElementById('deleteClientModal') !== null);
+            
+            // Ініціалізуємо валідацію в реальному часі для всіх форм
+            if (typeof setupRealTimeValidation === 'function') {
+                setupRealTimeValidation();
+            }
+            
+            // Функція для закриття модального вікна про пароль
+            window.closePasswordInfoModal = function() {
+                document.getElementById('passwordInfoModal').style.display = 'none';
+                document.body.classList.remove('modal-open');
+            };
+            
+            // Оновлюємо функцію закриття модального вікна редагування
+            window.closeEditModal = function() {
+                window.location.href = "{% url 'admin_clients_list' %}";
+            };
+            
+            // Перевіряємо, чи потрібно показати модальне вікно з даними нового клієнта
+            {% if show_credentials %}
+                document.getElementById('addClientModal').style.display = 'block';
+                document.body.classList.add('modal-open');
+            {% endif %}
+            
+            // Додаємо обробники для всіх форм на сторінці
+            const forms = document.querySelectorAll('form');
+            forms.forEach(form => {
+                // Додаємо класи для полів з помилками
+                const fieldsWithErrors = form.querySelectorAll('.form-control');
+                fieldsWithErrors.forEach(field => {
+                    const fieldName = field.getAttribute('name');
+                    const errorDiv = form.querySelector(`[id*="${fieldName}"] .error-message, .error-message`);
+                    if (errorDiv && errorDiv.textContent.trim()) {
+                        field.classList.add('is-invalid');
+                        field.classList.add('error-field');
+                    }
+                });
+            });
+        });
+        
+        // Функція для пошуку клієнтів
+        function searchClients() {
+            const searchValue = document.getElementById('searchInput').value;
+            if (searchValue.trim() !== '') {
+                window.location.replace(`/clients/?search=${encodeURIComponent(searchValue)}`);
+            } else {
+                window.location.replace('/clients/');
+            }
+        }
+        
+        // Обробка натискання Enter в полі пошуку
+        document.getElementById('searchInput').addEventListener('keyup', function(event) {
+            if (event.key === 'Enter') {
+                searchClients();
+            }
+        });
+        
+        // Додаємо обробник для кліку поза модальним вікном
+        document.addEventListener('click', function(event) {
+            if (event.target.classList.contains('modal') && event.target.id === 'editClientModal') {
+                window.location.href = "{% url 'admin_clients_list' %}";
+            }
+        });
+    </script>
+    <style>
+        /* Спеціальний стиль для модального вікна редагування */
+        #editClientModal.modal {
+            background-color: transparent; /* Прозорий фон для вікна редагування */
+            display: flex !important;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .close {
+            cursor: pointer;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        
+        .close:hover {
+            color: #f00;
+        }
+        
+        /* Стилі для кнопок дій у таблиці */
+        .edit-btn, .delete-btn {
+            width: 32px;
+            height: 32px;
+            border-radius: 4px;
+            border: none;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 0 2px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            text-decoration: none;
+        }
+
+        /* Add these new styles to ensure buttons display horizontally */
+        td:last-child {
+            white-space: nowrap;
+            width: 1%;
+            text-align: center;
+        }
+        
+        td:last-child .edit-btn,
+        td:last-child .delete-btn {
+            display: inline-flex;
+            vertical-align: middle;
+        }
+
+        .edit-btn {
+            background-color: #2196F3;
+        }
+
+        .edit-btn:hover {
+            background-color: #0b7dda;
+        }
+
+        .delete-btn {
+            background-color: #f44336;
+        }
+
+        .delete-btn:hover {
+            background-color: #d32f2f;
+        }
+        
+        /* Стилі для форми в модальному вікні */
+        .form-actions {
+            text-align: right;
+            width: 100%;
+        }
+        
+        .form-actions button {
+            padding: 6px 14px;
+            margin-left: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            display: inline-block;
+        }
+        
+        .cancel-btn {
+            background-color: #f1f1f1;
+            border: 1px solid #ccc;
+            color: #333;
+        }
+        
+        .cancel-btn:hover {
+            background-color: #e1e1e1;
+        }
+        
+        .green-btn {
+            background-color: #28a745;
+            border: none;
+            color: white;
+        }
+        
+        .green-btn:hover {
+            background-color: #218838;
+        }
+        
+        .form-group {
+            display: inline-block;
+            width: 48%;
+            vertical-align: top;
+            margin-right: 2%;
+        }
+        
+        .form-group:nth-child(even) {
+            margin-right: 0;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        /* CSS для підсвічування помилок */
+        .error-field {
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+        }
+        
+        .form-control.is-invalid {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+        
+        .error-message {
+            color: #dc3545;
+            font-size: 12px;
+            margin-top: 5px;
+            display: block;
+        }
+        
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+        }
+        
+        .alert-danger {
+            color: #721c24;
+            background-color: #f8d7da;
+            border-color: #f5c6cb;
+        }
+        
+        .alert-success {
+            color: #155724;
+            background-color: #d4edda;
+            border-color: #c3e6cb;
+        }
+        
+        .alert-info {
+            color: #0c5460;
+            background-color: #d1ecf1;
+            border-color: #bee5eb;
+        }
+        
+        .alert ul {
+            margin-bottom: 0;
+            padding-left: 20px;
+        }
+        
+        .form-control:focus {
+            border-color: #80bdff;
+            outline: 0;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+        
+        /* Стилі для виділення обов'язкових полів */
+        .form-group label::after {
+            content: " *";
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        /* Стилі для завантаження */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .loading-spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Адаптивність для малих екранів */
+        @media (max-width: 768px) {
+            .modal-content {
+                width: 90%;
+                margin: 10% auto;
+            }
+            
+            .form-group {
+                width: 100%;
+                margin-right: 0;
+            }
+        }
+        
+        /* Стилі для модального вікна редагування при відображенні через Django */
+        body.show-edit-modal {
+            overflow: hidden;
+        }
+        
+        body.show-edit-modal::after {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1999;
+        }
+        
+        body.show-edit-modal #editClientModal {
+            display: block;
+            z-index: 2000;
+        }
+        
+        /* Стилі для статусу договору */
+        .contract-date {
+            display: block;
+            font-weight: 600;
+            font-size: 0.95em;
+        }
+        
+        .contract-status {
+            display: block;
+            font-size: 0.8em;
+            font-style: normal;
+            margin-top: 3px;
+            opacity: 0.85;
+        }
+        
+        /* Колірні індикатори статусу договору */
+        .contract-expired {
+            background-color: #fdf2f2 !important;
+            color: #8b4a47 !important;
+            border-left: 3px solid #d69e2e !important;
+        }
+        
+        .contract-expired .contract-status {
+            color: #b83e3e;
+            font-weight: 500;
+        }
+        
+        .contract-expiring-soon {
+            background-color: #fef9f2 !important;
+            color: #9c5d27 !important;
+            border-left: 3px solid #ed8936 !important;
+        }
+        
+        .contract-expiring-soon .contract-status {
+            color: #c05621;
+            font-weight: 500;
+        }
+        
+        .contract-expiring {
+            background-color: #fffef0 !important;
+            color: #975a16 !important;
+            border-left: 3px solid #f6d55c !important;
+        }
+        
+        .contract-expiring .contract-status {
+            color: #b7791f;
+            font-weight: 400;
+        }
+        
+        .contract-active {
+            background-color: #f0f9f0 !important;
+            color: #38a169 !important;
+            border-left: 3px solid #48bb78 !important;
+        }
+        
+        .contract-active .contract-status {
+            color: #2f855a;
+            font-weight: 400;
+        }
+        
+        .contract-no-contract {
+            background-color: #f7f7f8 !important;
+            color: #6b7280 !important;
+            border-left: 3px solid #9ca3af !important;
+        }
+        
+        .contract-no-contract .contract-status {
+            color: #4b5563;
+            font-weight: 500;
+        }
+        
+        /* Додаткові стилі для плавності */
+        td.contract-expired:hover,
+        td.contract-expiring-soon:hover,
+        td.contract-expiring:hover,
+        td.contract-active:hover,
+        td.contract-no-contract:hover {
+            opacity: 0.9;
+            transition: opacity 0.2s ease-in-out;
+        }
+    </style>
+    
+    <!-- Відображення модального вікна з паролем, якщо він був згенерований -->
+    {% if show_password_info and generated_password %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Створюємо контент модального вікна
+            var passwordInfoContent = document.getElementById('passwordInfoContent');
+            if (passwordInfoContent) {
+                passwordInfoContent.innerHTML = `
+                    <div class="alert alert-success">
+                        <p><strong>Користувача успішно оновлено!</strong></p>
+                        <p><strong>Дані користувача:</strong></p>
+                        <p>ПІБ: {{ edited_user_name }}</p>
+                        <p>Email: {{ edited_user_email }}</p>
+                        <p class="mb-2"><strong>Новий пароль:</strong> <span style="font-weight: bold; font-size: 1.2em; color: #007bff; background-color: #f8f9fa; padding: 2px 6px; border-radius: 3px;">{{ generated_password }}</span></p>
+                        <p class="mb-3">Будь ласка, збережіть цей пароль в надійному місці.</p>
+                    </div>
+                `;
+            }
+            
+            // Відображаємо модальне вікно
+            var passwordInfoModal = document.getElementById('passwordInfoModal');
+            if (passwordInfoModal) {
+                passwordInfoModal.style.display = 'block';
+                document.body.classList.add('modal-open');
+            }
+        });
+    </script>
+    {% endif %}
+{% endblock %}

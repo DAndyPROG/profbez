@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Реєстр курсів{% endblock %}
+{% block header %}
+    <h1>КАБІНЕТ АДМІНІСТРАТОРА</h1>
+{% endblock %}
+{% block nav %}{% endblock %}
+{% block content %}
+    <main>
+        <div class="controls">
+            <div class="search-controls">
+                <input type="text" id="searchCourse" placeholder="Пошук за назвою курсу..." value="{{ search_term }}">
+                <button onclick="searchCourses()" class="add-btn green-btn">Пошук</button>
+            </div>
+            <div class="add-controls">
+                <button onclick="addNewCourse()" class="add-btn green-btn">➕ Додати курс</button>
+            </div>
+        </div>
+
+        <div>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th style="width: 10%;">№ КУРСУ</th>
+                        <th style="width: 20%;">НАЗВА КУРСУ</th>
+                        <th style="width: 30%;">ОПИС КУРСУ</th>
+                        <th style="width: 30%;">URL НА ВІДЕО</th>
+                        <th style="width: 10%;">ДІЇ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for course in courses %}
+                    <tr data-course-id="{{ course.id }}">
+                        <td>{{ course.code }}</td>
+                        <td>{{ course.course_name }}</td>
+                        <td>{{ course.course_description }}</td>
+                        <td>
+                            {% for video in course.course_videos.all %}
+                                <div data-video-id="{{ video.id }}" class="video-display-row">
+                                    <div class="video-url">{{ video.video_url }}</div>
+                                    <div class="video-name">{{ video.video_name }}</div>
+                                </div>
+                            {% empty %}
+                                <div>Немає відео</div>
+                            {% endfor %}
+                        </td>
+                        <td>
+                            <button class="edit-btn" onclick="editCourse({{ course.id }})">✎</button>
+                            <button class="delete-btn" onclick="deleteCourse({{ course.id }})">✖</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Додаємо пагінацію -->
+        <div class="pagination">
+            <span class="step-links">
+                {% if courses.has_previous %}
+                    <a href="?page=1{% if search_term %}&search={{ search_term }}{% endif %}">&laquo; Перша</a>
+                    <a href="?page={{ courses.previous_page_number }}{% if search_term %}&search={{ search_term }}{% endif %}">Попередня</a>
+                {% endif %}
+
+                <span class="current">
+                    Сторінка {{ courses.number }} з {{ courses.paginator.num_pages }}
+                </span>
+
+                {% if courses.has_next %}
+                    <a href="?page={{ courses.next_page_number }}{% if search_term %}&search={{ search_term }}{% endif %}">Наступна</a>
+                    <a href="?page={{ courses.paginator.num_pages }}{% if search_term %}&search={{ search_term }}{% endif %}">Остання &raquo;</a>
+                {% endif %}
+            </span>
+        </div>
+    </main>
+     <!-- Модальне вікно для видалення курсу -->
+     <div id="deleteCourseModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Видалити курс</h2>
+                <span class="close">&times;</span>
+            </div>
+            <p id="deleteCourseMessage">Ви впевнені, що хочете видалити цей курс?</p>
+            <form id="deleteCourseForm" method="POST">
+                {% csrf_token %}
+                <input type="hidden" id="deleteCourseId" name="course_id">
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" id="cancelDeleteCourse">Скасувати</button>
+                    <button type="submit" class="delete-btn">Видалити</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Модальне вікно для додавання нового курсу -->
+    <div id="addCourseModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Додати новий курс</h2>
+                <span class="close">&times;</span>
+            </div>
+            <form id="addCourseForm" action="{% url 'admin_courses_create' %}" method="POST">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="{{ form.code.id_for_label }}">{{ form.code.label }}:</label>
+                    {{ form.code }}
+                    {{ form.code.errors }}
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.course_name.id_for_label }}">{{ form.course_name.label }}:</label>
+                    {{ form.course_name }}
+                    {{ form.course_name.errors }}
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.course_description.id_for_label }}">{{ form.course_description.label }}:</label>
+                    {{ form.course_description }}
+                    {{ form.course_description.errors }}
+                </div>
+                
+                <div class="form-group">
+                    <label>URL відео:</label>
+                    {{ formset.management_form }}
+                    <div class="course-container">
+                        <div id="videoFormset">
+                            {% for video_form in formset %}
+                                <div class="video-form">
+                                    {{ video_form.id }}
+                                    <div class="course-inputs-row">
+                                        <div class="course-url-field">
+                                            {{ video_form.video_url }}
+                                            <div class="field-error" id="error-video_{{ forloop.counter0 }}" style="color: red;"></div>
+                                        </div>
+                                        <div class="video-name-field">
+                                            {{ video_form.video_name }}
+                                        </div>
+                                        <div class="course-action-field">
+                                            <button type="button" class="remove-video delete-btn">✖</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        <div id="additionalVideos">
+                            <!-- Тут будуть додаватися нові поля для відео -->
+                        </div>
+                        <button type="button" id="addMoreVideo" class="secondary-btn">+ Додати ще відео</button>
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn" id="cancelAddCourse">Скасувати</button>
+                    <button type="submit" class="add-btn green-btn">Зберегти</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Модальне вікно для редагування курсу -->
+    <div id="editCourseModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Редагувати курс</h2>
+                <span class="close">&times;</span>
+            </div>
+            <form id="editCourseForm" action="{% url 'admin_courses_update' 0 %}" method="POST">
+                {% csrf_token %}
+                <input type="hidden" id="id_edit_course_id" name="course_id">
+                <input type="hidden" id="deleted_videos" name="deleted_videos" value="">
+                
+                <div class="form-group">
+                    <label for="id_edit_code">Код курсу:</label>
+                    <input type="text" id="id_edit_code" name="code" required>
+                    <div class="field-error" id="error-edit-code" style="color: red;"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_edit_course_name">Назва курсу:</label>
+                    <input type="text" id="id_edit_course_name" name="course_name" required>
+                    <div class="field-error" id="error-edit-course_name" style="color: red;"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_edit_course_description">Опис курсу:</label>
+                    <textarea id="id_edit_course_description" name="course_description" rows="4"></textarea>
+                    <div class="field-error" id="error-edit-course_description" style="color: red;"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label>URL відео:</label>
+                    <input type="hidden" name="course_videos-TOTAL_FORMS" value="0">
+                    <input type="hidden" name="course_videos-INITIAL_FORMS" value="0">
+                    <input type="hidden" name="course_videos-MIN_NUM_FORMS" value="0">
+                    <input type="hidden" name="course_videos-MAX_NUM_FORMS" value="1000">
+                    
+                    <div id="editVideoFormset">
+                        <!-- Тут будуть відео для редагування -->
+                    </div>
+                    <div id="editAdditionalVideos">
+                        <!-- Тут будуть додаватися нові поля для відео -->
+                    </div>
+                    <button type="button" id="addMoreEditVideo" class="secondary-btn">+ Додати ще відео</button>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn" id="cancelEditCourse">Скасувати</button>
+                    <button type="submit" class="add-btn green-btn">Зберегти зміни</button>
+                </div>
+            </form>
+        </div>
+    </div>
+{% endblock %}
+{% block scripts %}
+    <script src="{% static 'js/admin_courses.js' %}"></script>
+{% endblock %}

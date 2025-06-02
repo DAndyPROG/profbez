@@ -1,0 +1,417 @@
+/* Modal styles fix */
+.modal {
+    display: none;
+    position: fixed !important;
+    z-index: 2000 !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    overflow: auto !important;
+    background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Backdrop styling */
+.modal-backdrop {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 1999 !important;
+    background-color: rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Special class for modals that should be shown immediately (used with URL parameters) */
+.modal.show-modal {
+    display: block !important;
+}
+
+.modal-content {
+    background-color: #fff !important;
+    margin: 5% auto !important;
+    padding: 20px !important;
+    border: none !important;
+    border-radius: 5px !important;
+    width: 80% !important;
+    max-width: 800px !important;
+    position: relative !important;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
+}
+
+.modal-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-bottom: 1px solid #eee !important;
+    padding-bottom: 10px !important;
+    margin-bottom: 20px !important;
+}
+
+.modal-header .close {
+    cursor: pointer !important;
+    font-size: 24px !important;
+    font-weight: bold !important;
+}
+
+.modal-header .close:hover {
+    color: #f00 !important;
+}
+
+.form-container {
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+    padding: 10px !important;
+}
+
+/* Hide any crossed-out elements or info blocks */
+[style*="text-decoration: line-through"],
+.alert-info {
+    display: none !important;
+}
+
+.alert {
+    padding: 15px !important;
+    margin-bottom: 20px !important;
+    border: 1px solid transparent !important;
+    border-radius: 4px !important;
+}
+
+.alert-success {
+    color: #155724 !important;
+    background-color: #d4edda !important;
+    border-color: #c3e6cb !important;
+}
+
+.alert-danger {
+    color: #721c24 !important;
+    background-color: #f8d7da !important;
+    border-color: #f5c6cb !important;
+}
+
+/* Error message styling */
+.alert-danger ul {
+    margin-top: 10px !important;
+    margin-bottom: 0 !important;
+    padding-left: 20px !important;
+}
+
+.alert-danger li {
+    margin-bottom: 5px !important;
+}
+
+/* Form field containers for better error display */
+.form-group {
+    position: relative !important;
+    margin-bottom: 15px !important;
+}
+
+.form-control {
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out !important;
+}
+
+/* Improved error field styling with animation */
+.error-field {
+    border: 2px solid #dc3545 !important;
+    background-color: #fff5f5 !important;
+    box-shadow: 0 0 5px rgba(220, 53, 69, 0.5) !important;
+    animation: shake 0.5s ease-in-out !important;
+}
+
+.error-field:focus {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 8px rgba(220, 53, 69, 0.8) !important;
+    background-color: #fff5f5 !important;
+    outline: none !important;
+}
+
+/* Shake animation for error fields */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-2px); }
+    20%, 40%, 60%, 80% { transform: translateX(2px); }
+}
+
+/* Enhanced error message styling */
+.error-message {
+    color: #dc3545 !important;
+    font-size: 12px !important;
+    margin-top: 5px !important;
+    display: block !important;
+    font-weight: normal !important;
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+}
+
+/* Placeholder styling for error fields */
+.error-field::placeholder {
+    color: #dc3545 !important;
+    opacity: 0.7 !important;
+}
+
+/* Success field styling */
+.valid-field {
+    border: 2px solid #28a745 !important;
+    background-color: #f8fff8 !important;
+}
+
+.valid-field:focus {
+    border-color: #28a745 !important;
+    box-shadow: 0 0 5px rgba(40, 167, 69, 0.5) !important;
+    background-color: #f8fff8 !important;
+}
+
+/* Import error styling */
+.import-errors {
+    background-color: #f8d7da !important;
+    border: 1px solid #f5c6cb !important;
+    border-radius: 5px !important;
+    padding: 15px !important;
+    margin-bottom: 15px !important;
+    color: #721c24 !important;
+}
+
+.import-errors h3 {
+    color: #721c24 !important;
+    margin-top: 0 !important;
+    margin-bottom: 10px !important;
+    font-size: 16px !important;
+    font-weight: bold !important;
+}
+
+.import-errors .error-list {
+    margin: 0 !important;
+    padding-left: 20px !important;
+}
+
+.import-errors .error-list li {
+    margin-bottom: 5px !important;
+    color: #721c24 !important;
+}
+
+/* Form validation message */
+ul.errorlist {
+    list-style-type: none !important;
+    padding: 0 !important;
+    margin: 5px 0 !important;
+    color: #dc3545 !important;
+    font-weight: 600 !important;
+}
+
+.credentials-container {
+    margin: 20px 0 !important;
+    padding: 15px !important;
+    background-color: #f8f9fa !important;
+    border-left: 5px solid #28a745 !important;
+}
+
+/* Fix for modal positioning and z-index */
+.modal-open {
+    overflow: hidden !important;
+}
+
+.modal-open .modal {
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+}
+
+/* Modal transition effects */
+.modal {
+    transition: opacity 0.15s linear !important;
+}
+
+.modal.fade .modal-dialog {
+    transition: transform 0.3s ease-out !important;
+    transform: translate(0, -50px) !important;
+}
+
+.modal.show .modal-dialog {
+    transform: none !important;
+}
+
+/* Fix modal buttons */
+.modal .modal-actions {
+    display: flex !important;
+    justify-content: flex-end !important;
+    gap: 10px !important;
+    margin-top: 20px !important;
+}
+
+.modal .cancel-btn, 
+.modal .delete-btn,
+.modal .green-btn {
+    padding: 8px 16px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+    font-size: 14px !important;
+    border: none !important;
+    position: relative !important;
+    z-index: 2050 !important;
+}
+
+.modal .cancel-btn {
+    background-color: #f1f1f1 !important;
+    color: #333 !important;
+}
+
+.modal .delete-btn {
+    background-color: #f44336 !important;
+    color: white !important;
+}
+
+.modal .green-btn {
+    background-color: #4CAF50 !important;
+    color: white !important;
+}
+
+/* Fix for overlapping modals */
+#deleteClientModal {
+    z-index: 2100 !important; /* Higher than other modals */
+}
+
+#addClientModal {
+    z-index: 2050 !important; /* Medium priority */
+}
+
+#editClientModal {
+    z-index: 2000 !important; /* Base level */
+}
+
+/* Special styling for validation error message at the top */
+.validation-errors {
+    color: #fff !important;
+    background-color: #dc3545 !important;
+    border: 1px solid #c82333 !important;
+    border-radius: 8px !important;
+    padding: 0 !important;
+    margin-bottom: 25px !important;
+    font-weight: 500 !important;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15) !important;
+    animation: fadeIn 0.3s ease-in-out !important;
+    overflow: hidden !important;
+}
+
+.validation-errors > div:first-child,
+.validation-errors > strong {
+    display: block !important;
+    background-color: #c82333 !important;
+    padding: 10px 15px !important;
+    font-size: 1.1rem !important;
+    font-weight: 600 !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.validation-errors > ul,
+.validation-errors > p {
+    margin: 0 !important;
+    padding: 12px 15px !important;
+}
+
+.validation-errors ul {
+    margin: 0 !important;
+    padding-left: 20px !important;
+}
+
+.validation-errors li {
+    margin-bottom: 6px !important;
+}
+
+/* Single line error message style */
+.form-error-header {
+    background-color: #dc3545 !important;
+    color: white !important;
+    padding: 15px 20px !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    text-align: center !important;
+    margin-bottom: 20px !important;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1) !important;
+    border: 1px solid #c82333 !important;
+    font-size: 1.1rem !important;
+    animation: fadeIn 0.3s ease-in-out !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.form-error-header::before {
+    content: "" !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 8px !important;
+    height: 100% !important;
+    background-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Виправляємо стилі для всіх select полів */
+select.error-field {
+    border: 2px solid #dc3545 !important;
+    background-color: #fff5f5 !important;
+    color: #dc3545 !important;
+}
+
+/* Виправляємо стилі для всіх textarea полів */
+textarea.error-field {
+    border: 2px solid #dc3545 !important;
+    background-color: #fff5f5 !important;
+    box-shadow: 0 0 5px rgba(220, 53, 69, 0.5) !important;
+}
+
+/* Стилі для input полів всіх типів */
+input.error-field[type="text"],
+input.error-field[type="email"],
+input.error-field[type="date"],
+input.error-field[type="number"],
+input.error-field[type="tel"],
+input.error-field[type="password"],
+input.error-field[type="url"] {
+    border: 2px solid #dc3545 !important;
+    background-color: #fff5f5 !important;
+    box-shadow: 0 0 5px rgba(220, 53, 69, 0.5) !important;
+    animation: shake 0.5s ease-in-out !important;
+}
+
+/* Стилі для полів при фокусі */
+input.error-field:focus,
+select.error-field:focus,
+textarea.error-field:focus {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 8px rgba(220, 53, 69, 0.8) !important;
+    background-color: #fff5f5 !important;
+    outline: none !important;
+}
+
+/* Додаткові стилі для покращення візуального відображення */
+.form-group.has-error {
+    margin-bottom: 20px !important;
+}
+
+.form-group.has-error .form-control {
+    border: 2px solid #dc3545 !important;
+    background-color: #fff5f5 !important;
+}
+
+/* Стилі для кнопок у полях з помилками */
+.error-field + .btn,
+.has-error .btn {
+    border-color: #dc3545 !important;
+}
+
+/* Переконуємося що помилки видимі */
+.field-error,
+.error-message {
+    display: block !important;
+    color: #dc3545 !important;
+    font-size: 12px !important;
+    margin-top: 5px !important;
+    font-weight: normal !important;
+    line-height: 1.4 !important;
+}
+
+/* Стилі для полів файлів */
+input[type="file"].error-field {
+    border: 2px solid #dc3545 !important;
+    background-color: #fff5f5 !important;
+    padding: 5px !important;
+}

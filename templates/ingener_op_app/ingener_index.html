@@ -1,0 +1,854 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+</head>
+<body>
+    <header>
+        <h1>КАБІНЕТ ІНЖЕНЕРА</h1>
+        <div class="user-info">
+            {% if request.user.is_authenticated %}
+            <span><strong>
+                {{ request.user.first_name }} {{ request.user.last_name }}
+            </strong></span>
+            {% endif %}
+            <button type="button" onclick="showPasswordModal()" class="cancel-btn">Змінити пароль</button>
+            <a href="{% url 'logout' %}" class="back-home">ВИЙТИ↗</a>
+        </div>
+    </header>
+    <main>
+        <!-- Модальне вікно для нотифікацій і попереджень -->
+        <div id="notificationModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="notification-title">Повідомлення</h2>
+                    <span class="close" onclick="closeNotificationModal()">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div id="notification-content" class="alert"></div>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="add-btn green-btn" onclick="closeNotificationModal()">OK</button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <div class="search-controls">
+                <input type="text" id="searchStudent" placeholder="Пошук за ПІБ..." value="{{ search_student }}">
+                <button onclick="searchStudents()" class="add-btn green-btn">Пошук</button>
+                <button onclick="document.getElementById('courseListModal').style.display = 'block';" class="add-btn green-btn">Перелік напрямків навчання</button>
+            </div>
+            <div class="add-controls">
+                <button onclick="exportToExcel()" class="add-btn green-btn">Експорт в EXCEL</button>
+                <button onclick="document.getElementById('importModal').style.display = 'block'; console.log('Direct modal open');" class="add-btn green-btn">Імпорт з EXCEL</button>
+                <button onclick="addNewStudent()" class="add-btn green-btn">➕ Додати слухача</button>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table id="studentsTable">
+                <thead>
+                    <tr>
+                        <th>№ П/П</th>
+                        <th>ДАТА ДОДАВАННЯ</th>
+                        <th>ПІБ СЛУХАЧА</th>
+                        <th>E-MAIL</th>
+                        <th>ПОСАДА СЛУХАЧА</th>
+                        <th>НАПРЯМОК НАВЧАННЯ</th>
+                        <th>ПЕРІОД НАВЧАННЯ</th>
+                        <th>ТЕРМІН ДІЇ НАВЧАННЯ</th>
+                        <th>СТАТУС НАВЧАННЯ</th>
+                        <th>РЕЗУЛЬТАТИ ТЕСТУ</th>
+                        <th style="width: 8%;">ДІЇ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in students %}
+                        <tr>
+                            <td>{{ forloop.counter }}</td>
+                            <td>{{ student.created_at|date:"d.m.Y" }}</td>
+                            <td>{{ student.user.first_name }} {{ student.user.last_name }}</td>
+                            <td>{{ student.user.email }}</td>
+                            <td>{{ student.position }}</td>
+                            <td>
+                                {% for education in student.studies.all %}
+                                    {{ education.course.code }}{% if not forloop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>1 рік</td>
+                            <td>
+                                {% if student.end_date %}
+                                    {{ student.end_date|date:"d.m.Y" }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if student.status %}
+                                    {{ student.get_status_display }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% for education in student.studies.all %}
+                                    {{ education.course.code }}: {{ education.last_score }}%{% if not forloop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                            <td>
+                                <button class="edit-btn" onclick="editStudent({{ student.id }})">✎</button>
+                                <button class="delete-btn" onclick="deleteStudent({{ student.id }})">✖</button>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Додаємо пагінацію -->
+        <div class="pagination">
+            <span class="step-links">
+                {% if students.has_previous %}
+                    <a href="?page=1{% if search_student %}&search_student={{ search_student }}{% endif %}{% if search_company %}&search_company={{ search_company }}{% endif %}">&laquo; Перша</a>
+                    <a href="?page={{ students.previous_page_number }}{% if search_student %}&search_student={{ search_student }}{% endif %}{% if search_company %}&search_company={{ search_company }}{% endif %}">Попередня</a>
+                {% endif %}
+
+                <span class="current">
+                    Сторінка {{ students.number }} з {{ students.paginator.num_pages }}
+                </span>
+
+                {% if students.has_next %}
+                    <a href="?page={{ students.next_page_number }}{% if search_student %}&search_student={{ search_student }}{% endif %}{% if search_company %}&search_company={{ search_company }}{% endif %}">Наступна</a>
+                    <a href="?page={{ students.paginator.num_pages }}{% if search_student %}&search_student={{ search_student }}{% endif %}{% if search_company %}&search_company={{ search_company }}{% endif %}">Остання &raquo;</a>
+                {% endif %}
+            </span>
+        </div>
+    </main>
+    <!-- Модальне вікно для видалення слухача -->
+    <div id="deleteStudentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Видалити слухача</h2>
+                <span class="close">&times;</span>
+            </div>
+            <p id="deleteStudentMessage">Ви впевнені, що хочете видалити цього слухача?</p>
+            <form id="deleteStudentForm" method="POST" action="">
+                {% csrf_token %}
+                <input type="hidden" id="deleteStudentId" name="student_id">
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" id="cancelDeleteStudent">Скасувати</button>
+                    <button type="button" class="delete-btn" id="finalDeleteButton">Видалити</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Модальне вікно для додавання нового слухача -->
+    <div id="addStudentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                {% if show_credentials %}
+                    <h2>Реєстрація успішна!</h2>
+                {% else %}
+                    <h2>Додати нового слухача</h2>
+                {% endif %}
+                <span class="close">&times;</span>
+            </div>
+            
+            <!-- Показуємо форму або інформацію про пароль залежно від контексту -->
+            {% if show_credentials %}
+                <div class="alert alert-success credentials-container">
+                    <p>Слухача успішно додано до системи</p>
+                    <p><strong>Email:</strong> {{ generated_email }}</p>
+                    <p><strong>Пароль:</strong> {{ generated_password }}</p>
+                    <p>Будь ласка, збережіть ці дані в надійному місці.</p>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="add-btn green-btn" onclick="closeAndRefresh()">Закрити</button>
+                </div>
+            {% else %}
+                {% if messages %}
+                    <div class="messages">
+                        {% for message in messages %}
+                        <div class="{% if message.tags %}alert alert-{{ message.tags }}{% else %}validation-errors{% endif %}">
+                            {% if message.tags != 'success' %}
+                            <div>Увага!</div>
+                            {% endif %}
+                            {{ message }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                
+                {% if form.non_field_errors %}
+                <div class="validation-errors">
+                    <ul>
+                    {% for error in form.non_field_errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                
+                <form id="addStudentForm" action="{% url 'ingener_students_create' %}" method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="is_ajax" value="true">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ form.first_name.id_for_label }}" class="{% if form.first_name.field.required %}required-field{% endif %}">{{ form.first_name.label }}:</label>
+                            {{ form.first_name }}
+                            {% if form.first_name.errors %}
+                            <div class="error-message">
+                                {% for error in form.first_name.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.last_name.id_for_label }}" class="{% if form.last_name.field.required %}required-field{% endif %}">{{ form.last_name.label }}:</label>
+                            {{ form.last_name }}
+                            {% if form.last_name.errors %}
+                            <div class="error-message">
+                                {% for error in form.last_name.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ form.email.id_for_label }}" class="{% if form.email.field.required %}required-field{% endif %}">{{ form.email.label }}:</label>
+                            {{ form.email }}
+                            {% if form.email.errors %}
+                            <div class="error-message">
+                                {% for error in form.email.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ form.position.id_for_label }}" class="{% if form.position.field.required %}required-field{% endif %}">{{ form.position.label }}:</label>
+                            {{ form.position }}
+                            {% if form.position.errors %}
+                            <div class="error-message">
+                                {% for error in form.position.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ form.phone_number.id_for_label }}" class="{% if form.phone_number.field.required %}required-field{% endif %}">{{ form.phone_number.label }}:</label>
+                            {{ form.phone_number }}
+                            {% if form.phone_number.errors %}
+                            <div class="error-message">
+                                {% for error in form.phone_number.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="company_name" class="required-field">Назва компанії:</label>
+                            <input type="text" class="form-control" value="{{ request.user.ingener_info.company_name }}" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            <input type="hidden" name="company_name" value="{{ request.user.ingener_info.id }}">
+                        </div>
+                    </div>
+                     <!-- Додаємо контейнер для курсів -->
+                    <div class="course-container">
+                        <h3>Напрямок навчання:</h3>
+                        <div id="courses_container">
+                            <div class="course-form">
+                                <div class="course-inputs-row">
+                                    <div class="course-url-field">
+                                        <select name="courses" class="form-control course-select" required>
+                                            <option value="">Оберіть курс</option>
+                                            {% for course in form.fields.courses.queryset %}
+                                                <option value="{{ course.id }}">{{ course.code }} - {{ course.name }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="course-action-field">
+                                        <button type="button" class="remove-course delete-btn">✖</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" id="addMoreCourse" class="secondary-btn">+ Додати ще один курс</button>
+                    </div>            
+                    <div class="form-actions">
+                        <button type="button" class="cancel-btn" id="cancelAddStudent">Скасувати</button>
+                        <button type="button" class="add-btn green-btn" id="saveAddStudent" onclick="validateAndSubmitForm('addStudentForm'); return false;">Зберегти</button>
+                    </div>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+    <!-- Модальне вікно для редагування слухача -->
+    {% if edit_form %}
+    <div id="editStudentModal" class="modal" style="display: block;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Редагувати слухача</h2>
+                <span class="close" data-close-action="hide" onclick="window.location.href='{% url 'ingener_index' %}'">✖</span>
+            </div>
+            {% if messages %}
+                <div class="messages">
+                    {% for message in messages %}
+                    <div class="{% if message.tags %}alert alert-{{ message.tags }}{% else %}validation-errors{% endif %}">
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            {% if edit_form.non_field_errors %}
+            <div class="validation-errors">
+                <ul>
+                {% for error in edit_form.non_field_errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if show_edit_credentials or generated_password %}
+            <!-- Блок з новим паролем, якщо він був згенерований -->
+            <div class="alert alert-success credentials-container">
+                <h3>Згенеровано новий пароль для <strong>{% if user_name %}{{ user_name }}{% elif user_email %}{{ user_email }}{% else %}{{ edit_form.fields.email.initial }}{% endif %}</strong></h3>
+                <p><strong>Пароль:</strong> {{ generated_password }}</p>
+                <p>Будь ласка, збережіть цей пароль у надійному місці.</p>
+            </div>
+            {% else %}
+            
+            <form id="editStudentForm" method="POST" action="{% url 'ingener_students_update' edit_id %}">
+                {% csrf_token %}
+                <input type="hidden" name="has_form_errors" value="{{ has_form_errors|yesno:'True,False' }}">
+                <div class="form-group">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ edit_form.first_name.id_for_label }}" class="{% if edit_form.first_name.field.required %}required-field{% endif %}">{{ edit_form.first_name.label }}:</label>
+                            {{ edit_form.first_name }}
+                            {% if edit_form.first_name.errors %}
+                            <div class="error-message">
+                                {% for error in edit_form.first_name.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ edit_form.last_name.id_for_label }}" class="{% if edit_form.last_name.field.required %}required-field{% endif %}">{{ edit_form.last_name.label }}:</label>
+                            {{ edit_form.last_name }}
+                            {% if edit_form.last_name.errors %}
+                            <div class="error-message">
+                                {% for error in edit_form.last_name.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ edit_form.email.id_for_label }}" class="{% if edit_form.email.field.required %}required-field{% endif %}">{{ edit_form.email.label }}:</label>
+                            {{ edit_form.email }}
+                            {% if edit_form.email.errors %}
+                            <div class="error-message">
+                                {% for error in edit_form.email.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ edit_form.position.id_for_label }}" class="{% if edit_form.position.field.required %}required-field{% endif %}">{{ edit_form.position.label }}:</label>
+                            {{ edit_form.position }}
+                            {% if edit_form.position.errors %}
+                            <div class="error-message">
+                                {% for error in edit_form.position.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="{{ edit_form.phone_number.id_for_label }}" class="{% if edit_form.phone_number.field.required %}required-field{% endif %}">{{ edit_form.phone_number.label }}:</label>
+                            {{ edit_form.phone_number }}
+                            {% if edit_form.phone_number.errors %}
+                            <div class="error-message">
+                                {% for error in edit_form.phone_number.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="form-group">
+                            <label for="{{ edit_form.company_name.id_for_label }}" class="{% if edit_form.company_name.field.required %}required-field{% endif %}">{{ edit_form.company_name.label }}:</label>
+                            <input type="text" class="form-control" value="{{ request.user.ingener_info.company_name }}" readonly style="background-color: #f8f9fa; cursor: not-allowed;">
+                            <input type="hidden" name="company_name" value="{{ request.user.ingener_info.id }}">
+                            {% if edit_form.company_name.errors %}
+                            <div class="error-message">
+                                {% for error in edit_form.company_name.errors %}
+                                {{ error }}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <!-- Секція для генерації нового пароля -->
+                    {% for field in edit_form %}
+                        {% if field.name == 'generate_new_password' %}
+                        <div class="form-row">
+                            <div class="form-group password-checkbox">
+                                {{ field }}
+                                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                                <small>
+                                    Якщо відмічено, для користувача буде згенеровано новий пароль
+                                </small>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                    
+                    <!-- Контейнер для курсів -->
+                    <div class="course-container">
+                        <h3>Напрямок навчання:</h3>
+                        <div id="edit_courses_container">
+                            {% with student_courses=edit_form.instance.studies.all %}
+                                {% if student_courses %}
+                                    {% for education in student_courses %}
+                                        <div class="course-form">
+                                            <div class="course-inputs-row">
+                                                <div class="course-url-field">
+                                                    <select name="courses" class="form-control course-select">
+                                                        <option value="">Оберіть курс</option>
+                                                        {% for course in edit_form.fields.courses.queryset %}
+                                                            <option value="{{ course.id }}" {% if course.id == education.course.id %}selected{% endif %}>
+                                                                {{ course.code }} - {{ course.name }}
+                                                            </option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="course-action-field">
+                                                    <button type="button" class="remove-course delete-btn">✖</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="course-form">
+                                        <div class="course-inputs-row">
+                                            <div class="course-url-field">
+                                                <select name="courses" class="form-control course-select">
+                                                    <option value="">Оберіть курс</option>
+                                                    {% for course in edit_form.fields.courses.queryset %}
+                                                        <option value="{{ course.id }}">{{ course.code }} - {{ course.name }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div class="course-action-field">
+                                                <button type="button" class="remove-course delete-btn">✖</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            {% endwith %}
+                        </div>
+                        <button type="button" id="addMoreEditCourse" class="secondary-btn">+ Додати ще один курс</button>
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn" style="border-radius: 6px;" onclick="window.location.href='{% url 'ingener_index' %}'">Скасувати</button>
+                    <button type="button" class="green-btn" style="border-radius: 6px;" id="saveEditStudent" onclick="submitEditForm()">Зберегти</button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Модальне вікно для імпорту слухачів з Excel -->
+    <div id="importModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Імпорт слухачів з Excel</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <!-- Контейнер для помилок імпорту (буде заповнюватись динамічно) -->
+                <div class="import-errors" style="display: none;"></div>
+                
+                <div class="import-instructions">
+                    <h3>Інструкції з імпорту:</h3>
+                    <p>Для успішного імпорту слухачів, Excel-файл повинен містити наступні колонки:</p>
+                    <ul>
+                        <li><strong>ПІБ СЛУХАЧА</strong> - повне ім'я слухача (ім'я та прізвище)</li>
+                        <li><strong>E-MAIL</strong> - унікальна електронна адреса слухача</li>
+                        <li><strong>ПОСАДА СЛУХАЧА</strong> - посада слухача в компанії</li>
+                        <li><strong>НАПРЯМОК НАВЧАННЯ</strong> - коди курсів, розділені комами</li>
+                    </ul>
+                    <p class="note">Примітка: Для кожного нового слухача буде автоматично згенеровано пароль.</p>
+                </div>
+                
+                <div class="import-form">
+                    <form action="{% url 'ingener_import_students_from_excel' %}" method="POST" enctype="multipart/form-data" id="importForm">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label for="excel_file">Виберіть Excel:</label>
+                            <input type="file" id="excel_file" name="excel_file" required accept=".xlsx,.xls,.csv">
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" class="cancel-btn" style="border-radius: 6px;" onclick="closeImportModal()">Скасувати</button>
+                            <button type="submit" class="green-btn" style="border-radius: 6px;">Імпортувати</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="template-download">
+                    <h3>Шаблон для імпорту:</h3>
+                    <p>Ви можете завантажити шаблон Excel-файлу для імпорту слухачів:</p>
+                    <a href="#" class="download-btn" onclick="generateTemplate()">Завантажити шаблон</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Модальне вікно для перегляду напрямків навчання -->
+    <div id="courseListModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Перелік напрямків навчання</h2>
+                <span class="close" onclick="document.getElementById('courseListModal').style.display='none'">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p class="note">Тут представлені всі доступні курси навчання</p>
+                
+                <div class="courses-container">
+                    {% if courses %}
+                        <table class="courses-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 10%">Код</th>
+                                    <th style="width: 25%">Назва курсу</th>
+                                    <th style="width: 55%">Опис</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for course in courses %}
+                                <tr>
+                                    <td>{{ course.code }}</td>
+                                    <td>{{ course.course_name }}</td>
+                                    <td>{{ course.course_description|truncatechars:200 }}</td>
+                                   
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    {% else %}
+                        <p>Наразі немає доступних курсів</p>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="cancel-btn" style="border-radius: 6px;" onclick="document.getElementById('courseListModal').style.display='none'">Закрити</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Модальне вікно для зміни пароля -->
+    <div id="passwordModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Зміна пароля</h2>
+                <span class="close" onclick="closePasswordModal()">&times;</span>
+            </div>
+            <div class="modal-body">
+                {% if messages %}
+                    <div class="messages">
+                        {% for message in messages %}
+                        <div class="{% if message.tags %}alert alert-{{ message.tags }}{% else %}validation-errors{% endif %}">
+                            {{ message }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <form action="{% url 'set_new_password' %}" method="POST">
+                    {% csrf_token %}
+                    {% if password_form %}
+                        {% if password_form.non_field_errors %}
+                        <div class="validation-errors">
+                            <ul>
+                            {% for error in password_form.non_field_errors %}
+                                <li>{{ error }}</li>
+                            {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    
+                        {% for field in password_form %}
+                            <div class="form-group">
+                                <label for="{{ field.id_for_label }}" class="{% if field.field.required %}required-field{% endif %}">{{ field.label }}:</label>
+                                {{ field }}
+                                {% if field.errors %}
+                                <div class="error-message">
+                                    {% for error in field.errors %}
+                                    {{ error }}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="form-group">
+                            <label for="id_new_password1" class="required-field">Новий пароль:</label>
+                            <input type="password" name="new_password1" id="id_new_password1" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="id_new_password2" class="required-field">Підтвердження нового пароля:</label>
+                            <input type="password" name="new_password2" id="id_new_password2" required>
+                        </div>
+                    {% endif %}
+                    <div class="form-actions">
+                        <button type="button" class="cancel-btn" style="border-radius: 6px;" onclick="closePasswordModal()">Скасувати</button>
+                        <button type="submit" class="green-btn" style="border-radius: 6px;">Змінити пароль</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{% static 'js/ingener_index.js' %}"></script>
+    <script>
+        // Override the function with the correct URL path
+        function clearImportErrors() {
+            console.log('Fixed clearImportErrors called');
+            const errorsContainer = document.querySelector('.import-errors');
+            
+            if (errorsContainer) {
+                errorsContainer.style.display = 'none';
+                errorsContainer.innerHTML = '';
+                
+                // Make sure to use the full URL path
+                fetch('/ingener/students/clear-import-errors/', {
+                    method: 'POST',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': getCSRFToken()
+                    }
+                }).catch(error => {
+                    console.error('Error clearing import errors:', error);
+                });
+            }
+        }
+        
+        // Додаємо глобальну змінну для відображення модального вікна зміни пароля
+        {% if show_password_modal %}
+        var show_password_modal = true;
+        {% endif %}
+        
+        // Виправлена функція для відкриття модального вікна зміни пароля
+        function showPasswordModal() {
+            const passwordModal = document.getElementById("passwordModal");
+            if (passwordModal) {
+                passwordModal.style.display = "block";
+                document.body.style.overflow = "hidden";
+            } else {
+                console.error("Елемент passwordModal не знайдено!");
+            }
+        }
+        
+        // Функції для роботи з модальним вікном повідомлень
+        function showNotificationModal(title, message, type = 'info') {
+            const modal = document.getElementById('notificationModal');
+            const titleEl = document.getElementById('notification-title');
+            const content = document.getElementById('notification-content');
+            
+            // Встановлюємо заголовок
+            titleEl.textContent = title || 'Повідомлення';
+            
+            // Встановлюємо вміст і тип повідомлення
+            content.innerHTML = message;
+            content.className = 'alert';
+            
+            // Додаємо клас відповідно до типу повідомлення
+            if (type === 'success') {
+                content.classList.add('alert-success');
+            } else if (type === 'error' || type === 'danger') {
+                content.classList.add('alert-danger');
+            } else if (type === 'warning') {
+                content.classList.add('alert-warning');
+            } else {
+                content.classList.add('alert-info');
+            }
+            
+            // Показуємо модальне вікно
+            modal.style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeNotificationModal() {
+            const modal = document.getElementById('notificationModal');
+            modal.style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        // Перехоплення стандартних алертів
+        const originalAlert = window.alert;
+        window.alert = function(message) {
+            showNotificationModal('Повідомлення', message);
+        };
+        
+        // Додаємо обробник події для кнопки зміни пароля
+        document.addEventListener('DOMContentLoaded', function() {
+            const passwordButton = document.querySelector('button[onclick="showPasswordModal()"]');
+            if (passwordButton) {
+                passwordButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    showPasswordModal();
+                });
+            }
+            
+            // Перевіряємо чи потрібно показати модальне вікно зміни пароля
+            if (typeof show_password_modal !== 'undefined' && show_password_modal) {
+                showPasswordModal();
+            }
+        });
+    </script>
+    <style>
+        /* Стилі для контейнера імпорту */
+        .import-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Стилі для списку помилок */
+        .error-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #fff8f8;
+            padding: 10px;
+            border: 1px solid #ffdddd;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .error-list li {
+            list-style: none;
+            margin-bottom: 5px;
+            color: red;
+
+        }
+        
+        /* Стилі для інструкцій */
+        .import-instructions ul {
+            padding-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .note {
+            color: #666;
+            font-style: italic;
+            margin-bottom: 15px;
+        }
+        
+        /* Стилі для форми імпорту */
+        .import-form {
+            margin-bottom: 20px;
+        }
+        
+        /* Стилі для кнопки скачування шаблону */
+        .download-btn {
+            display: inline-block;
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        
+        .download-btn:hover {
+            background-color: #45a049;
+        }
+        
+        /* Стилі для блоку завантаження шаблону */
+        .template-download {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        
+        /* Стилі для таблиці курсів */
+        .courses-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .courses-table th,
+        .courses-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        
+        .courses-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        
+        .courses-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .courses-table tr:hover {
+            background-color: #f1f1f1;
+        }
+        
+        .courses-container {
+            max-height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        
+        .course-status {
+            display: inline-block;
+            padding: 5px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .course-status.used {
+            background-color: #a8e6cf;
+            color: #2d6a4f;
+        }
+        
+        .course-status.available {
+            background-color: #dfe7fd;
+            color: #3f51b5;
+        }
+        
+        .modal-footer {
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            text-align: right;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</body>
+</html>
+    

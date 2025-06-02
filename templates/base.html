@@ -1,0 +1,95 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}{% endblock %}</title>
+    <!-- First load base styles -->
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <!-- Then load modal styles (modal_fix.css takes precedence) -->
+    <link rel="stylesheet" href="{% static 'css/admin_modals.css' %}">
+    <link rel="stylesheet" href="{% static 'css/modal_fix.css' %}">
+    {% block extra_css %}{% endblock %}
+    <script>
+        console.log('Base HTML loaded with CSS files');
+    </script>
+</head>
+<body>
+    <header>
+        {% block header %}{% endblock %}
+        <div class="user-info">
+            {% if request.user.is_authenticated %}
+            <span><strong>
+                {{ request.user.first_name }} {{ request.user.last_name }}
+            </strong></span>
+            {% endif %}
+            <a href="{% url 'logout' %}" class="back-home">ВИЙТИ↗</a>
+        </div>
+    </header>
+    
+    <nav>
+        {% block nav %}{% endblock %}
+        <div class="nav-progress">
+            <div class="progress-item {% if request.resolver_match.url_name == 'admin_clients_list' %}active{% endif %}">
+                <a href="{% url 'admin_clients_list' %}">
+                    <span class="progress-label">РЕЄСТР КЛІЄНТІВ</span>
+                    <span class="dot {% if request.resolver_match.url_name == 'admin_clients_list' %}active{% endif %}"></span>
+                </a>
+            </div>
+            <div class="progress-item {% if request.resolver_match.url_name == 'admin_courses_list' %}active{% endif %}">
+                <a href="{% url 'admin_courses_list' %}">
+                    <span class="progress-label">РЕЄСТР КУРСІВ</span>
+                    <span class="dot {% if request.resolver_match.url_name == 'admin_courses_list' %}active{% endif %}"></span>
+                </a>
+            </div>
+            <div class="progress-item {% if request.resolver_match.url_name == 'students_list' %}active{% endif %}">
+                <a href="{% url 'students_list' %}">
+                    <span class="progress-label">РЕЄСТР СЛУХАЧІВ</span>
+                    <span class="dot {% if request.resolver_match.url_name == 'students_list' %}active{% endif %}"></span>
+                </a>
+            </div>
+            <div class="progress-item {% if request.resolver_match.url_name == 'admin_tests_list' %}active{% endif %}">
+                <a href="{% url 'admin_tests_list' %}">
+                    <span class="progress-label">РЕЄСТР ТЕСТУВАННЯ</span>
+                    <span class="dot {% if request.resolver_match.url_name == 'admin_tests_list' %}active{% endif %}"></span>
+                </a>
+            </div>
+        </div>
+    </nav>
+    {% block content %}{% endblock %}
+    
+    <!-- Debug div for errors -->
+    <div id="js-debug" style="display:none; position:fixed; bottom:0; right:0; background:#fff; border:1px solid #ddd; padding:10px; max-height:200px; overflow:auto; z-index:9999;"></div>
+    
+    <!-- Base scripts -->
+    <script>
+        // Log errors to debug div
+        window.onerror = function(message, source, lineno, colno, error) {
+            var debugDiv = document.getElementById('js-debug');
+            if (debugDiv) {
+                debugDiv.style.display = 'block';
+                debugDiv.innerHTML += '<div style="color:red; margin-bottom:5px; border-bottom:1px solid #ddd; padding-bottom:5px;">' +
+                    '<strong>Error:</strong> ' + message + '<br>' +
+                    '<strong>Source:</strong> ' + source + ':' + lineno + ':' + colno + '</div>';
+            }
+            console.error(message, source, lineno, colno, error);
+            return false;
+        };
+        
+        // Show debug div on keyboard shortcut (Ctrl+Shift+D)
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                var debugDiv = document.getElementById('js-debug');
+                if (debugDiv) {
+                    debugDiv.style.display = debugDiv.style.display === 'none' ? 'block' : 'none';
+                }
+            }
+        });
+    </script>
+    
+    <!-- Universal form validation script -->
+    <script src="{% static 'js/form-validation.js' %}"></script>
+    
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,1 @@
+default_app_config = 'ingener_op_app.apps.IngenerOpAppConfig'

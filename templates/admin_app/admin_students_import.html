@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Імпорт слухачів з Excel{% endblock %}
+{% block header %}
+    <h1>КАБІНЕТ АДМІНІСТРАТОРА</h1>
+{% endblock %}
+{% block nav %}{% endblock %}
+{% block content %}
+    <main>
+        <div class="import-container">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Імпорт слухачів з Excel</h2>
+                </div>
+                <div class="card-body">
+                    {% if messages %}
+                        <div class="messages">
+                            {% for message in messages %}
+                                <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-danger{% endif %}">
+                                    {{ message }}
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    
+                    
+                    
+                    <div class="import-instructions">
+                        <h3>Інструкції з імпорту:</h3>
+                        <p>Для успішного імпорту слухачів, Excel-файл повинен містити наступні колонки:</p>
+                        <ul>
+                            <li><strong>КОМПАНІЯ</strong> - назва компанії, яка повинна існувати в системі</li>
+                            <li><strong>ПІБ СЛУХАЧА</strong> - повне ім'я слухача (ім'я та прізвище)</li>
+                            <li><strong>E-MAIL</strong> - унікальна електронна адреса слухача</li>
+                            <li><strong>ПОСАДА СЛУХАЧА</strong> - посада слухача в компанії</li>
+                            <li><strong>НАПРЯМОК НАВЧАННЯ</strong> - коди курсів, розділені комами</li>
+                        </ul>
+                        <p class="note">Примітка: Для кожного нового слухача буде автоматично згенеровано пароль.</p>
+                    </div>
+                    
+                    <div class="import-form">
+                        <form action="{% url 'import_students_from_excel' %}" method="POST" enctype="multipart/form-data">
+                            {% csrf_token %}
+                            <div class="form-group">
+                                <label for="excel_file">Виберіть Excel або CSV файл:</label>
+                                <input type="file" id="excel_file" name="excel_file" required accept=".xlsx,.xls,.csv">
+                            </div>
+                            <div class="form-actions">
+                                <a href="{% url 'students_list' %}" class="cancel-btn">Скасувати</a>
+                                <button type="submit" class="add-btn green-btn">Імпортувати</button>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <div class="template-download">
+                        <h3>Шаблон для імпорту:</h3>
+                        <p>Ви можете завантажити шаблон Excel-файлу для імпорту слухачів:</p>
+                        <a href="#" class="download-btn" onclick="generateTemplate()">Завантажити шаблон</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+{% endblock %}
+{% block scripts %}
+    <script>
+        // Функція для генерації шаблону Excel
+        function generateTemplate() {
+            // Створюємо таблицю з правильними заголовками
+            const headers = ['КОМПАНІЯ', 'ПІБ СЛУХАЧА', 'E-MAIL', 'ПОСАДА СЛУХАЧА', 'НАПРЯМОК НАВЧАННЯ'];
+            
+            // Створюємо CSV-рядок з заголовками і одним прикладом рядка
+            let csvContent = headers.join(',') + '\n';
+            csvContent += 'ТОВ "Приклад",Петро Петренко,petrenko@example.com,Інженер з охорони праці,57413';
+            
+            // Кодуємо CSV для завантаження
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            
+            // Створюємо тимчасове посилання для завантаження
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'шаблон_імпорту_слухачів.csv');
+            document.body.appendChild(link);
+            
+            // Клікаємо на посилання для початку завантаження
+            link.click();
+            
+            // Видаляємо тимчасове посилання
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(link);
+            }, 100);
+        }
+        
+        // Очищаємо помилки імпорту при перезавантаженні сторінки
+        window.onload = function() {
+            // Очищаємо сесійні помилки після того, як вони були показані
+            if (document.querySelector('.import-errors')) {
+                // Використовуємо AJAX для очищення сесії
+                fetch('/students/clear-import-errors/', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+            }
+        };
+    </script>
+    <style>
+        .import-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .card {
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .card-header {
+            background-color: #f5f5f5;
+            padding: 15px 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .card-body {
+            padding: 20px;
+        }
+        
+        .import-instructions, .import-form, .template-download {
+            margin-bottom: 30px;
+        }
+        
+        .import-instructions ul {
+            padding-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .note {
+            color: #666;
+            font-style: italic;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+        
+        .download-btn:hover {
+            background-color: #45a049;
+        }
+        
+        .error-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #fff8f8;
+            padding: 10px;
+            border: 1px solid #ffdddd;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .error-list li {
+            margin-bottom: 5px;
+            color: #d9534f;
+        }
+    </style>
+{% endblock %} 

@@ -1,0 +1,556 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Реєстр тестування{% endblock %}
+{% block header %}
+    <h1>КАБІНЕТ АДМІНІСТРАТОРА</h1>
+{% endblock %}
+{% block nav %}{% endblock %}
+{% block content %}
+    <main>
+   
+        
+        <div class="controls">
+            <div class="search-controls">
+                <input type="text" id="searchQuestion" placeholder="Пошук за текстом запитання..." value="{{ search_term }}">
+                <button onclick="searchQuestions()" class="add-btn green-btn">Пошук</button>
+            </div>
+            <div class="add-controls">
+                <button onclick="document.getElementById('importExcelModal').style.display='block'; document.body.style.overflow='hidden';" class="add-btn green-btn">Імпорт з EXCEL</button>
+                <button onclick="addNewQuestion()" class="add-btn green-btn">➕ Додати запитання</button>
+            </div>
+        </div>
+
+        <div>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th style="width: 10%;">№ КУРСУ</th>
+                        <th style="width: 20%;">ЗАПИТАННЯ</th>
+                        <th style="width: 5%;">ПРАВИЛЬНА ВІДПОВІДЬ</th>
+                        <th style="width: 5%;">ВІДПОВІДЬ 1</th>
+                        <th style="width: 5%;">ВІДПОВІДЬ 2</th>
+                        <th style="width: 5%;">ВІДПОВІДЬ 3</th>
+                        <th style="width: 5%;">ВІДПОВІДЬ 4</th>
+                        <th style="width: 5%;">ВІДПОВІДЬ 5</th>
+                        <th style="width: 5%;">ВІДПОВІДЬ 6</th>
+                        <th style="width: 5%;">ВІДПОВІДЬ 7</th>
+                        <th style="width: 5%;">ВІДПОВІДЬ 8</th>
+                        <th style="width: 10%;">ДІЇ</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in questions_data %}
+                    <tr data-question-id="{{ item.question.id }}">
+                        <td>{{ item.question.course.code }}</td>
+                        <td>{{ item.question.question_text }}</td>
+                        
+                        <!-- Правильна відповідь -->
+                        <td>
+                            {% if item.correct_answer %}
+                                {{ item.correct_answer.answer_text }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        
+                        <!-- Неправильні відповіді -->
+                        {% for answer in item.incorrect_answers %}
+                            <td>{{ answer.answer_text }}</td>
+                        {% endfor %}
+                        
+                        <!-- Заповнюємо порожні комірки для інших відповідей -->
+                        {% with total_answers=item.incorrect_answers|length|add:1 %}
+                            {% for i in "12345678" %}
+                                {% if forloop.counter <= 8 and forloop.counter > item.incorrect_answers|length %}
+                                    <td>-</td>
+                                {% endif %}
+                            {% endfor %}
+                        {% endwith %}
+                        
+                        <td>
+                            <button class="edit-btn" onclick="editQuestion({{ item.question.id }})">✎</button>
+                            <button class="delete-btn" onclick="deleteQuestion({{ item.question.id }})">✖</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Додаємо пагінацію -->
+        <div class="pagination">
+            <span class="step-links">
+                {% if questions.has_previous %}
+                    <a href="?page=1{% if search_term %}&search={{ search_term }}{% endif %}">&laquo; Перша</a>
+                    <a href="?page={{ questions.previous_page_number }}{% if search_term %}&search={{ search_term }}{% endif %}">Попередня</a>
+                {% endif %}
+
+                <span class="current">
+                    Сторінка {{ questions.number }} з {{ questions.paginator.num_pages }}
+                </span>
+
+                {% if questions.has_next %}
+                    <a href="?page={{ questions.next_page_number }}{% if search_term %}&search={{ search_term }}{% endif %}">Наступна</a>
+                    <a href="?page={{ questions.paginator.num_pages }}{% if search_term %}&search={{ search_term }}{% endif %}">Остання &raquo;</a>
+                {% endif %}
+            </span>
+        </div>
+    </main>
+     <!-- Модальне вікно для видалення запитання -->
+     <div id="deleteQuestionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Видалити запитання</h2>
+                <span class="close">&times;</span>
+            </div>
+            <p id="deleteQuestionMessage">Ви впевнені, що хочете видалити це запитання?</p>
+            <form id="deleteQuestionForm" method="POST">
+                {% csrf_token %}
+                <input type="hidden" id="deleteQuestionId" name="question_id">
+                <div class="modal-actions">
+                    <button type="button" class="cancel-btn" id="cancelDeleteQuestion">Скасувати</button>
+                    <button type="submit" class="delete-btn">Видалити</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Модальне вікно для додавання нового запитання -->
+    <div id="addQuestionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Додати нове запитання</h2>
+                <span class="close">&times;</span>
+            </div>
+            <form id="addQuestionForm" method="POST">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="{{ question_form.course.id_for_label }}">Курс:</label>
+                    {{ question_form.course }}
+                    <div class="field-error" id="error-course" style="color: red;"></div>
+                </div>
+                <div class="form-group">
+                    <label for="{{ question_form.question_text.id_for_label }}">{{ question_form.question_text.label }}:</label>
+                    {{ question_form.question_text }}
+                    <div class="field-error" id="error-question_text" style="color: red;"></div>
+                </div>
+                <div class="form-group">
+                    <label>Відповіді:</label>
+                    <p class="answer-info">Перше поле - правильна відповідь, всі інші - неправильні</p>
+                    <input type="hidden" name="answer_formset-TOTAL_FORMS" value="0">
+                    <input type="hidden" name="answer_formset-INITIAL_FORMS" value="0">
+                    <input type="hidden" name="answer_formset-MIN_NUM_FORMS" value="0">
+                    <input type="hidden" name="answer_formset-MAX_NUM_FORMS" value="1000">
+                    <div id="answerFormset">
+                        <!-- Тут буде правильна відповідь -->
+                    </div>
+                    <div id="additionalAnswers">
+                        <!-- Тут будуть додаватися неправильні відповіді -->
+                    </div>
+                    <button type="button" id="addMoreAnswer" class="secondary-btn">+ Додати неправильну відповідь</button>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn" id="cancelAddQuestion">Скасувати</button>
+                    <button type="submit" class="add-btn green-btn">Зберегти</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Модальне вікно для редагування запитання -->
+    <div id="editQuestionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Редагувати запитання</h2>
+                <span class="close">&times;</span>
+            </div>
+            <form id="editQuestionForm" method="POST">
+                {% csrf_token %}
+                <input type="hidden" id="id_edit_question_id" name="question_id">
+                <input type="hidden" id="deleted_answers" name="deleted_answers" value="">
+                
+                <div class="form-group">
+                    <label for="id_edit_course">Курс:</label>
+                    <select id="id_edit_course" name="course" class="form-control" required>
+                        {% for course in question_form.fields.course.queryset %}
+                            <option value="{{ course.id }}">{{ course.code }} - {{ course.course_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div class="field-error" id="error-edit-course" style="color: red;"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="id_edit_question_text">Текст запитання:</label>
+                    <input type="text" id="id_edit_question_text" name="question_text" required>
+                    <div class="field-error" id="error-edit-question_text" style="color: red;"></div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Відповіді:</label>
+                    <p class="answer-info">Перше поле - правильна відповідь, всі інші - неправильні</p>
+                    <!-- Formset management form fields -->
+                    <input type="hidden" name="answer_formset-TOTAL_FORMS" value="0">
+                    <input type="hidden" name="answer_formset-INITIAL_FORMS" value="0">
+                    <input type="hidden" name="answer_formset-MIN_NUM_FORMS" value="0">
+                    <input type="hidden" name="answer_formset-MAX_NUM_FORMS" value="1000">
+                    
+                    <div id="editAnswerFormset">
+                        <!-- Тут буде правильна відповідь -->
+                    </div>
+                    <div id="editAdditionalAnswers">
+                        <!-- Тут будуть додаватися неправильні відповіді -->
+                    </div>
+                    <button type="button" id="addMoreEditAnswer" class="secondary-btn">+ Додати неправильну відповідь</button>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="cancel-btn" id="cancelEditQuestion">Скасувати</button>
+                    <button type="submit" class="add-btn green-btn">Зберегти зміни</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Додаємо модальне вікно для імпорту запитань з Excel -->
+    <div id="importExcelModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Імпорт запитань з EXCEL</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="import-instructions">
+                    <h3>Інструкції з імпорту:</h3>
+                    <p>Для успішного імпорту запитань, Excel-файл повинен містити наступні колонки:</p>
+                    <ul>
+                        <li><strong>ЗАПИТАННЯ</strong> - текст запитання </li>
+                        <li><strong>ПРАВИЛЬНА ВІДПОВІДЬ</strong> - текст правильної відповіді</li>
+                        <li><strong>ВІДПОВІДЬ 1-8</strong> - тексти неправильних відповідей</li>
+                    </ul>
+                    <p class="note">Примітка: Кожне запитання буде додано до вибраного курсу.</p>
+                    <p class="note">Для зручного створення файлу можна завантажити готовий шаблон нижче.</p>
+                </div>
+                
+                <div class="import-form">
+                    <form id="importTestsForm" action="{% url 'import_tests_from_excel' %}" method="POST" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label for="course_for_import">Оберіть курс для запитань:</label>
+                            <select id="course_for_import" name="course_id" class="form-control" required>
+                                {% for course in question_form.fields.course.queryset %}
+                                    <option value="{{ course.id }}">{{ course.code }} - {{ course.course_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="excel_file">Виберіть Excel або CSV файл:</label>
+                            <input type="file" id="excel_file" name="excel_file" required accept=".xlsx,.xls,.csv">
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="button" class="cancel-btn" id="cancelImport" onclick="closeImportModal()">Скасувати</button>
+                            <button type="submit" class="add-btn green-btn">Імпортувати</button>
+                        </div>
+                    </form>
+                </div>
+                
+                <div class="template-download">
+                    <h3>Шаблон для імпорту:</h3>
+                    <p>Ви можете завантажити шаблон Excel-файлу для імпорту запитань:</p>
+                    <button class="download-btn" id="downloadTemplate" onclick="downloadImportTemplate()">Завантажити шаблон</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}
+{% block scripts %}
+    <script src="{% static 'js/admin_tests.js' %}?v=2.0"></script>
+    <script>
+        // Debug script
+        console.log('Debug script loaded');
+        
+        // Add a direct event listener to the import button
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Debug DOMContentLoaded fired');
+            
+            // Verify the import form
+            const importForm = document.getElementById('importTestsForm');
+            console.log('Import form found:', importForm !== null);
+            
+            // Set up form validation
+            if (importForm) {
+                console.log('Setting up form validation');
+                // Validation will be handled by the form's submit event listener
+            }
+            
+            // Auto-hide alerts after 5 seconds
+            const alerts = document.querySelectorAll('.alert, .import-errors-display');
+            if (alerts.length > 0) {
+                console.log('Found alerts to auto-hide:', alerts.length);
+                setTimeout(function() {
+                    alerts.forEach(function(alert) {
+                        alert.style.transition = 'opacity 1s';
+                        alert.style.opacity = '0';
+                        setTimeout(function() {
+                            alert.style.display = 'none';
+                        }, 1000);
+                    });
+                }, 5000);
+            }
+            
+            // Add click handlers for alert close buttons
+            const closeButtons = document.querySelectorAll('.close-alert');
+            closeButtons.forEach(function(button) {
+                button.addEventListener('click', function() {
+                    const alert = this.parentElement;
+                    alert.style.opacity = '0';
+                    setTimeout(function() {
+                        alert.style.display = 'none';
+                    }, 300);
+                });
+            });
+        });
+        
+        // Handle template download
+        function downloadImportTemplate() {
+            console.log('Download template clicked');
+            
+            // Create template headers with the expected column names
+            const headers = ['ЗАПИТАННЯ', 'ПРАВИЛЬНА ВІДПОВІДЬ', 'ВІДПОВІДЬ 1', 'ВІДПОВІДЬ 2', 'ВІДПОВІДЬ 3', 'ВІДПОВІДЬ 4', 'ВІДПОВІДЬ 5', 'ВІДПОВІДЬ 6', 'ВІДПОВІДЬ 7', 'ВІДПОВІДЬ 8'];
+            
+            // Create CSV content with headers and example rows
+            let csvContent = headers.join(',') + '\n';
+            csvContent += 'Хто створив Python?,Гвідо ван Россум,Біл Гейтс,Джеймс Гослінг,Лінус Торвальдс,Марк Цукерберг,,,,,\n';
+            csvContent += 'Скільки бітів в байті?,8,2,4,16,32,64,,,,\n';
+            csvContent += 'Яка команда використовується для клонування Git репозиторію?,git clone,git pull,git push,git commit,git add,git fetch,git checkout,,';
+            
+            // Create UTF-8 BOM for correct Cyrillic display in Excel
+            const BOM = '\uFEFF';
+            const csvContentWithBOM = BOM + csvContent;
+            
+            // Encode CSV for download
+            const blob = new Blob([csvContentWithBOM], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            
+            // Create a temporary link for download
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', 'шаблон_імпорту_запитань.csv');
+            document.body.appendChild(link);
+            
+            // Click the link to start download
+            link.click();
+            
+            // Clean up
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(link);
+            }, 100);
+        }
+        
+        // Close import modal
+        function closeImportModal() {
+            console.log('Close import modal clicked');
+            const importModal = document.getElementById('importExcelModal');
+            if (importModal) {
+                importModal.style.display = 'none';
+                document.body.style.overflow = 'auto';
+            }
+        }
+    </script>
+    <style>
+        /* Стилі для модального вікна імпорту */
+        .import-instructions {
+            margin-bottom: 20px;
+        }
+        
+        .import-instructions ul {
+            padding-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .note {
+            color: #666;
+            font-style: italic;
+            margin-bottom: 15px;
+        }
+        
+        .import-form {
+            margin-bottom: 20px;
+        }
+        
+        .template-download {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        
+        .download-btn {
+            display: inline-block;
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .download-btn:hover {
+            background-color: #45a049;
+        }
+        
+        .error-list {
+            max-height: 200px;
+            overflow-y: auto;
+            background-color: #fff8f8;
+            padding: 10px;
+            border: 1px solid #ffdddd;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        
+        .error-list li {
+            margin-bottom: 5px;
+            color: #d9534f;
+        }
+        
+        .import-errors-container {
+            margin-top: 15px;
+            margin-bottom: 15px;
+        }
+        
+        /* Стилі для повідомлень */
+        .messages {
+            margin-bottom: 20px;
+        }
+        
+        /* Анімація появи повідомлень */
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border: 1px solid transparent;
+            border-radius: 4px;
+            transition: opacity 1s ease-in-out;
+            animation: fadeIn 0.5s ease-in-out;
+            position: relative;
+        }
+        
+        .close-alert {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            color: inherit;
+            opacity: 0.5;
+            cursor: pointer;
+        }
+        
+        .close-alert:hover {
+            opacity: 1;
+        }
+        
+        .alert-success {
+            color: #3c763d;
+            background-color: #dff0d8;
+            border-color: #d6e9c6;
+        }
+        
+        .alert-info {
+            color: #31708f;
+            background-color: #d9edf7;
+            border-color: #bce8f1;
+        }
+        
+        .alert-warning {
+            color: #8a6d3b;
+            background-color: #fcf8e3;
+            border-color: #faebcc;
+        }
+        
+        .alert-error, .alert-danger {
+            color: #a94442;
+            background-color: #f2dede;
+            border-color: #ebccd1;
+        }
+        
+        .import-errors-display {
+            margin-bottom: 20px;
+            transition: opacity 1s ease-in-out;
+            animation: fadeIn 0.5s ease-in-out;
+            position: relative;
+            padding: 15px;
+        }
+        
+        .import-errors-display ul {
+            padding-left: 20px;
+            margin-top: 10px;
+        }
+        
+        .import-errors-display li {
+            margin-bottom: 5px;
+        }
+        
+        /* CSS для підсвічування помилок в тестах */
+        .error-field {
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+        }
+        
+        .form-control.is-invalid {
+            border-color: #dc3545;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+        }
+        
+        .error-message {
+            color: #dc3545;
+            font-size: 12px;
+            margin-top: 5px;
+            display: block;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+        
+        .answer-text-field input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+            transition: border-color 0.3s ease;
+        }
+        
+        .answer-text-field input:focus {
+            outline: none;
+            border-color: #007bff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+        
+        /* Додатковий стиль для answer полів з помилками */
+        .answer-text-field input.error-field {
+            border-color: #dc3545 !important;
+            box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25) !important;
+        }
+    </style>
+{% endblock %}

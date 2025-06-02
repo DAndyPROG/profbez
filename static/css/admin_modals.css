@@ -1,0 +1,82 @@
+/* Modal styles for admin pages */
+/* These styles are meant to complement modal_fix.css */
+
+.admin-modal {
+  display: none;
+  position: fixed;
+  z-index: 2000;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgba(0,0,0,0.5);
+}
+
+.admin-modal-content {
+  background-color: #fff;
+  margin: 5% auto;
+  padding: 20px;
+  border: none;
+  border-radius: 5px;
+  width: 80%;
+  max-width: 800px;
+  position: relative;
+  box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+}
+
+/* Admin-specific styles that don't conflict with modal_fix.css */
+.loading-indicator {
+  text-align: center;
+  padding: 20px;
+  margin: 20px 0;
+  background-color: #f5f5f5;
+  border-radius: 5px;
+}
+
+.success-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 10px 20px;
+  background-color: #4CAF50;
+  color: white;
+  border-radius: 5px;
+  z-index: 10000;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  transition: opacity 0.5s;
+}
+
+.form-actions {
+  margin-top: 20px;
+  text-align: right;
+}
+
+/* Make sure buttons look consistent */
+.form-actions button,
+.modal-actions button {
+  margin-left: 10px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: none;
+}
+
+.green-btn {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.cancel-btn {
+  background-color: #f1f1f1;
+  color: #333;
+}
+
+.delete-btn {
+  background-color: #f44336;
+  color: white;
+}
+
+/* Comment to note the purpose of this file */
+/* This file contains admin-specific modal styles that complement modal_fix.css */
+/* Conflicts have been resolved by removing duplicate rules */ 

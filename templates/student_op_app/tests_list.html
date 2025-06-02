@@ -1,0 +1,222 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Доступні тести</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 0;
+    }
+    .container-fluid {
+      padding: 0;
+    }
+    .header {
+      width: 100%;
+      padding: 0.5rem 1rem;
+      background-color: #fff;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .header-logo {
+      height: 40px;
+    }
+    .content-container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    .page-title {
+      margin-bottom: 2rem;
+      font-weight: 700;
+    }
+    .test-card {
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      transition: transform 0.2s;
+    }
+    .test-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .test-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .test-title {
+      font-weight: 600;
+      font-size: 1.2rem;
+      margin-bottom: 0.5rem;
+    }
+    .test-meta {
+      display: flex;
+      gap: 1.5rem;
+      margin-top: 1rem;
+    }
+    .meta-item {
+      display: flex;
+      align-items: center;
+      color: #666;
+      font-size: 0.9rem;
+    }
+    .meta-item i {
+      margin-right: 0.5rem;
+      font-size: 1rem;
+    }
+    .test-action {
+      margin-top: 1rem;
+      text-align: right;
+    }
+    .btn-start-test {
+      background-color: #e54c4c;
+      color: white;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-start-test:hover {
+      background-color: #d13838;
+      color: white;
+    }
+    .no-tests-message {
+      text-align: center;
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+      padding: 3rem;
+    }
+    .no-tests-icon {
+      font-size: 3rem;
+      color: #aaa;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="header">
+            <div class="d-flex align-items-center">
+                <a href="{% url 'students_index' %}">
+                    <img src="{% static 'img/logo.jpg' %}" alt="Logo" class="header-logo me-3" />
+                </a>
+                <div>
+                    <h5 class="mb-0">НАВЧАЛЬНО-ВИРОБНИЧИЙ ЦЕНТР</h5>
+                    <h4 class="fw-bold">Професійна безпека</h4>
+                </div>
+                <div class="ms-auto user-controls">
+                    <span class="user-greeting">{{ request.user.first_name }} {{ request.user.last_name }}</span>
+                    <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">
+                        <i class="bi bi-box-arrow-right"></i> Вийти
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Content -->
+        <div class="content-container">
+            <h2 class="page-title">Доступні тести</h2>
+            
+            {% if educations %}
+                {% for education in educations %}
+                <div class="test-card">
+                    <div class="test-header">
+                        <div>
+                            <div class="test-title">{{ education.course.course_name }}</div>
+                            <div class="text-muted">{{ education.course.course_code }}</div>
+                        </div>
+                        
+                        {% with test=education.tests.last %}
+                        <div>
+                            {% if test and test.is_comlited %}
+                                <span class="badge bg-success">Пройдено</span>
+                            {% elif test and not test.is_comlited %}
+                                <span class="badge bg-warning">Розпочато</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Не розпочато</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="test-meta">
+                        <div class="meta-item">
+                            <i class="bi bi-question-circle"></i>
+                            <span>{% if education.course.questions.count > 20 %}20{% else %}{{ education.course.questions.count }}{% endif %} питань</span>
+                        </div>
+                        
+                        <div class="meta-item">
+                            <i class="bi bi-alarm"></i>
+                            <span>Час проходження: необмежений</span>
+                        </div>
+                        
+                        {% if test %}
+                        <div class="meta-item">
+                            <i class="bi bi-repeat"></i>
+                            <span>Спроба <strong class="{% if test.attempts > 3 %}text-danger{% endif %}">{{ test.attempts }}</strong> з 6</span>
+                        </div>
+                        
+                        {% if test.is_comlited %}
+                        <div class="meta-item">
+                            <i class="bi bi-trophy"></i>
+                            <span>Результат: <strong class="{% if test.score >= 60 %}text-success{% else %}text-danger{% endif %}">{{ test.score|floatformat:2 }}%</strong></span>
+                        </div>
+                        {% endif %}
+                        {% endif %}
+                    </div>
+                    
+                    <div class="test-action">
+                        {% if test and not test.is_comlited %}
+                        <a href="{% url 'students_testing' %}?test_id={{ test.id }}" class="btn btn-start-test">
+                            <i class="bi bi-arrow-right-circle"></i> Продовжити тест
+                        </a>
+                        <a href="{% url 'students_testing' %}?education_id={{ education.id }}&start_new=true" class="btn btn-outline-danger ms-2">
+                            <i class="bi bi-arrow-repeat"></i> Почати заново
+                        </a>
+                        {% elif test and test.is_comlited and test.attempts < max_attempts and test.score < 60 %}
+                        <a href="{% url 'students_testing' %}?education_id={{ education.id }}&start_new=true" class="btn btn-start-test">
+                            <i class="bi bi-arrow-right-circle"></i> Спробувати знову
+                        </a>
+                        {% elif test and test.is_comlited and test.attempts >= max_attempts %}
+                        <a href="{% url 'tests_results' %}?test_id={{ test.id }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-eye"></i> Переглянути результати
+                        </a>
+                        {% elif not test or test.attempts < max_attempts %}
+                        <a href="{% url 'students_testing' %}?education_id={{ education.id }}&start_new=true" class="btn btn-start-test">
+                            <i class="bi bi-arrow-right-circle"></i> Почати тест
+                        </a>
+                        {% else %}
+                        <a href="{% url 'tests_results' %}?test_id={{ test.id }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-eye"></i> Переглянути результати
+                        </a>
+                        {% endif %}
+                    </div>
+                    {% endwith %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="no-tests-message">
+                    <div class="no-tests-icon">
+                        <i class="bi bi-journal-x"></i>
+                    </div>
+                    <h4>У вас немає доступних тестів</h4>
+                    <p class="text-muted">Зв'яжіться з вашим адміністратором, щоб отримати доступ до навчальних курсів.</p>
+                    <a href="{% url 'students_index' %}" class="btn btn-outline-secondary mt-3">
+                        <i class="bi bi-arrow-left"></i> Повернутися на головну
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 

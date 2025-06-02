@@ -1,0 +1,76 @@
+<table id="studentsTable">
+    <thead>
+        <tr>
+            <th>№ П/П</th>
+            <th>ДАТА ДОДАВАННЯ</th>
+            <th>ПІБ СЛУХАЧА</th>
+            <th>E-MAIL</th>
+            <th>ПОСАДА СЛУХАЧА</th>
+            <th>НАПРЯМОК НАВЧАННЯ</th>
+            <th>ПЕРІОД НАВЧАННЯ</th>
+            <th>ТЕРМІН ДІЇ НАВЧАННЯ</th>
+            <th>СТАТУС НАВЧАННЯ</th>
+            <th>РЕЗУЛЬТАТИ ТЕСТУ</th>
+            <th style="width: 8%;">ДІЇ</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for student in students %}
+            <tr>
+                <td>{{ forloop.counter }}</td>
+                <td>{{ student.created_at|date:"d.m.Y" }}</td>
+                <td>{{ student.user.first_name }} {{ student.user.last_name }}</td>
+                <td>{{ student.user.email }}</td>
+                <td>{{ student.position }}</td>
+                <td>
+                    {% for education in student.studies.all %}
+                        {{ education.course.code }}{% if not forloop.last %}, {% endif %}
+                    {% endfor %}
+                </td>
+                <td>1 рік</td>
+                <td>
+                    {% if student.end_date %}
+                        {{ student.end_date|date:"d.m.Y" }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    {% if student.status %}
+                        {{ student.get_status_display }}
+                    {% else %}
+                        -
+                    {% endif %}
+                </td>
+                <td>
+                    {% for education in student.studies.all %}
+                        {{ education.course.code }}: {{ education.last_score }}%{% if not forloop.last %}, {% endif %}
+                    {% endfor %}
+                </td>
+                <td>
+                    <button class="edit-btn" onclick="editStudent({{ student.id }})">✎</button>
+                    <button class="delete-btn" onclick="deleteStudent({{ student.id }})">✖</button>
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Пагінація -->
+<div class="pagination">
+    <span class="step-links">
+        {% if students.has_previous %}
+            <a href="?page=1{% if search_student %}&search_student={{ search_student }}{% endif %}{% if search_company %}&search_company={{ search_company }}{% endif %}">&laquo; Перша</a>
+            <a href="?page={{ students.previous_page_number }}{% if search_student %}&search_student={{ search_student }}{% endif %}{% if search_company %}&search_company={{ search_company }}{% endif %}">Попередня</a>
+        {% endif %}
+
+        <span class="current">
+            Сторінка {{ students.number }} з {{ students.paginator.num_pages }}
+        </span>
+
+        {% if students.has_next %}
+            <a href="?page={{ students.next_page_number }}{% if search_student %}&search_student={{ search_student }}{% endif %}{% if search_company %}&search_company={{ search_company }}{% endif %}">Наступна</a>
+            <a href="?page={{ students.paginator.num_pages }}{% if search_student %}&search_student={{ search_student }}{% endif %}{% if search_company %}&search_company={{ search_company }}{% endif %}">Остання &raquo;</a>
+        {% endif %}
+    </span>
+</div> 

@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Редагування клієнта{% endblock %}
+
+{% block content %}
+<div class="modal-overlay" id="editClientModalOverlay">
+    <div id="editClientModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Редагувати клієнта</h2>
+                <a href="{% url 'admin_clients_list' %}" class="close">&times;</a>
+            </div>
+            <div class="modal-body">
+                {% if messages %}
+                    <div class="messages">
+                        {% for message in messages %}
+                        <div class="alert {% if message.tags %}alert-{{ message.tags }}{% else %}alert-danger{% endif %}">
+                            {{ message }}
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                
+                {% if generated_password %}
+                    <div class="alert alert-success">
+                        <h3>Пароль згенеровано успішно</h3>
+                        <p><strong>Дані користувача:</strong></p>
+                        <p>ПІБ: {{ edit_form.cleaned_data.first_name }} {{ edit_form.cleaned_data.last_name }}</p>
+                        <p>Email: {{ edit_form.cleaned_data.email }}</p>
+                        <p class="mb-2"><strong>Новий пароль:</strong> <span style="font-weight: bold; font-size: 1.2em; color: #007bff; background-color: #f8f9fa; padding: 2px 6px; border-radius: 3px;">{{ generated_password }}</span></p>
+                        <p class="mb-3">Будь ласка, збережіть цей пароль в надійному місці.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <div class="form-actions">
+                            <a href="{% url 'admin_clients_list' %}" class="cancel-btn">Закрити</a>
+                        </div>
+                    </div>
+                {% else %}
+                    <form id="editClientForm" method="POST" action="{% url 'admin_clients_update' edit_id %}">
+                        {% csrf_token %}
+                        
+                        {% if edit_form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in edit_form.non_field_errors %}
+                                <p>{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        
+                        {% for field in edit_form %}
+                            {% if field.name != 'generate_password' %}
+                                {% if forloop.counter0|divisibleby:2 %}
+                                <div class="form-row">
+                                {% endif %}
+                                    <div class="form-group">
+                                        {{ field.label_tag }}
+                                        {% if field.name == 'contract_end_date' %}
+                                            <input type="date" name="{{ field.name }}" id="{{ field.auto_id }}" value="{{ field.value|date:'Y-m-d' }}" class="{{ field.field.widget.attrs.class }} {% if field.errors %}error-field{% endif %}" required>
+                                        {% else %}
+                                            {{ field }}
+                                        {% endif %}
+                                        {% if field.errors %}
+                                        <div class="error-message">
+                                            {% for error in field.errors %}
+                                            {{ error }}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                {% if forloop.counter|divisibleby:2 or forloop.last %}
+                                </div>
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                        
+                        <div class="form-row">
+                            <div class="form-group">
+                                <input type="checkbox" name="generate_password" id="id_generate_password">
+                                <label for="id_generate_password">Згенерувати новий пароль</label>
+                                <small>Якщо відмічено, для користувача буде згенеровано новий пароль</small>
+                            </div>
+                        </div>
+                        
+                        <div class="modal-footer">
+                            <div class="form-actions">
+                                <a href="{% url 'admin_clients_list' %}" class="cancel-btn">Скасувати</a>
+                                <button type="submit" class="add-btn green-btn">Зберегти</button>
+                            </div>
+                        </div>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Додаємо клас до body для активації модального вікна
+        document.body.classList.add('show-edit-modal');
+        
+        // Прив'язуємо обробник для закриття модального вікна по кліку на overlay
+        document.getElementById('editClientModalOverlay').addEventListener('click', function(e) {
+            if (e.target === this) {
+                window.location.href = "{% url 'admin_clients_list' %}";
+            }
+        });
+    });
+</script>
+<style>
+    /* Стилі для модального вікна редагування */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1999;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .modal {
+        position: relative;
+        display: block;
+        background-color: transparent;
+        width: 100%;
+        max-width: 700px;
+        max-height: 90vh;
+        z-index: 2000;
+        box-shadow: none;
+    }
+    
+    .modal-content {
+        background-color: #fff;
+        padding: 20px;
+        border-radius: 5px;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+        width: 100%;
+        max-width: 100%;
+        display: flex;
+        flex-direction: column;
+        max-height: 80vh;
+    }
+    
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+        margin-bottom: 20px;
+    }
+    
+    .modal-body {
+        overflow-y: auto;
+        flex: 1;
+    }
+    
+    .modal-footer {
+        border-top: 1px solid #eee;
+        padding-top: 10px;
+        margin-top: 20px;
+    }
+    
+    .form-row {
+        margin-bottom: 15px;
+        display: flex;
+        flex-wrap: wrap;
+    }
+    
+    .form-group {
+        flex: 0 0 48%;
+        margin-right: 2%;
+    }
+    
+    .form-group:nth-child(even) {
+        margin-right: 0;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: bold;
+    }
+    
+    .form-group input,
+    .form-group select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-sizing: border-box;
+    }
+    
+    .form-actions {
+        text-align: right;
+        width: 100%;
+    }
+    
+    .form-actions button,
+    .form-actions a {
+        padding: 6px 14px;
+        margin-left: 10px;
+        border-radius: 4px;
+        font-size: 14px;
+        cursor: pointer;
+        display: inline-block;
+        text-decoration: none;
+    }
+    
+    .cancel-btn {
+        background-color: #f1f1f1;
+        border: 1px solid #ccc;
+        color: #333;
+    }
+    
+    .cancel-btn:hover {
+        background-color: #e1e1e1;
+    }
+    
+    .green-btn {
+        background-color: #28a745;
+        border: none;
+        color: white;
+    }
+    
+    .green-btn:hover {
+        background-color: #218838;
+    }
+    
+    .close {
+        cursor: pointer;
+        font-size: 24px;
+        font-weight: bold;
+        text-decoration: none;
+        color: #000;
+    }
+    
+    .close:hover {
+        color: #f00;
+    }
+    
+    .error-message {
+        color: #dc3545;
+        font-size: 0.875rem;
+        margin-top: 5px;
+    }
+    
+    .error-field {
+        border-color: #dc3545 !important;
+        background-color: #fff8f8 !important;
+    }
+    
+    @media (max-width: 768px) {
+        .form-group {
+            flex: 0 0 100%;
+            margin-right: 0;
+        }
+    }
+</style>
+{% endblock %} 

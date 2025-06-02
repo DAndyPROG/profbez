@@ -1,0 +1,174 @@
+<!-- Modal template for adding new students -->
+<div class="modal-content student-modal">
+    <div class="modal-header">
+        {% if show_credentials %}
+            <h2>Реєстрація успішна!</h2>
+        {% else %}
+            <h2>Додати нового слухача</h2>
+        {% endif %}
+        <a href="{% url 'students_list' %}" class="close">✖</a>
+    </div>
+    
+    <div class="modal-body">
+        <form id="addStudentForm" action="{% url 'students_create' %}" method="POST" onsubmit="return submitFormWithCourses('addStudentForm')">
+            {% csrf_token %}
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="{{ form.first_name.id_for_label }}">{{ form.first_name.label }}:</label>
+                    {{ form.first_name }}
+                    {% if form.first_name.errors %}
+                    <div class="error-message">
+                        {% for error in form.first_name.errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if form.first_name.help_text %}
+                    <div class="help-text">
+                        {{ form.first_name.help_text }}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.last_name.id_for_label }}">{{ form.last_name.label }}:</label>
+                    {{ form.last_name }}
+                    {% if form.last_name.errors %}
+                    <div class="error-message">
+                        {% for error in form.last_name.errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if form.last_name.help_text %}
+                    <div class="help-text">
+                        {{ form.last_name.help_text }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="{{ form.email.id_for_label }}">{{ form.email.label }}:</label>
+                    {{ form.email }}
+                    {% if form.email.errors %}
+                    <div class="error-message">
+                        {% for error in form.email.errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if form.email.help_text %}
+                    <div class="help-text">
+                        {{ form.email.help_text }}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.position.id_for_label }}">{{ form.position.label }}:</label>
+                    {{ form.position }}
+                    {% if form.position.errors %}
+                    <div class="error-message">
+                        {% for error in form.position.errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if form.position.help_text %}
+                    <div class="help-text">
+                        {{ form.position.help_text }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="{{ form.phone_number.id_for_label }}">{{ form.phone_number.label }}:</label>
+                    {{ form.phone_number }}
+                    {% if form.phone_number.errors %}
+                    <div class="error-message">
+                        {% for error in form.phone_number.errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if form.phone_number.help_text %}
+                    <div class="help-text">
+                        {{ form.phone_number.help_text }}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="{{ form.company_name.id_for_label }}">Назва компанії:</label>
+                    <select name="company_name" class="form-control">
+                        <option value="">Оберіть компанію</option>
+                        {% for ingener in ingeners %}
+                            <option value="{{ ingener.id }}" {% if selected_company|stringformat:"s" == ingener.id|stringformat:"s" %}selected{% endif %}>
+                                {{ ingener.company_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    {% if form.company_name.errors %}
+                    <div class="error-message">
+                        {% for error in form.company_name.errors %}
+                            {{ error }}
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if form.company_name.help_text %}
+                    <div class="help-text">
+                        {{ form.company_name.help_text }}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            <!-- Course container -->
+            <div class="course-container">
+                <h3>Напрямок навчання:</h3>
+                <div id="courses_container">
+                    {% if selected_courses %}
+                        {% for course_id in selected_courses %}
+                            <div class="course-form">
+                                <div class="course-inputs-row">
+                                    <div class="course-url-field">
+                                        <select name="courses" class="form-control course-select">
+                                            <option value="">Оберіть курс</option>
+                                            {% for course in courses %}
+                                                <option value="{{ course.id }}" {% if course.id|stringformat:"s" == course_id %}selected{% endif %}>
+                                                    {{ course.code }} - {{ course.course_name }}
+                                                </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="course-action-field">
+                                        <button type="button" class="remove-course delete-btn">✖</button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="course-form">
+                            <div class="course-inputs-row">
+                                <div class="course-url-field">
+                                    <select name="courses" class="form-control course-select">
+                                        <option value="">Оберіть курс</option>
+                                        {% for course in courses %}
+                                            <option value="{{ course.id }}">{{ course.code }} - {{ course.course_name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="course-action-field">
+                                    <button type="button" class="remove-course delete-btn">✖</button>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+                <button type="button" id="addMoreCourse" class="secondary-btn">+ Додати ще один курс</button>
+            </div>            
+            <div class="form-actions">
+                <a href="{% url 'students_list' %}" class="cancel-btn">Скасувати</a>
+                <button type="submit" class="add-btn green-btn">Зберегти</button>
+            </div>
+        </form>
+    </div>
+</div>

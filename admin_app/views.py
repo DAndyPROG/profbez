@@ -1,0 +1,1987 @@
+from django import forms
+from django.shortcuts import render, redirect, get_object_or_404
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+from django.db.models import Q
+
+from student_op_app.forms import AnswerFormSet, QuestionForm, StudentEducationForm
+from .models import Course, CourseVideo, CustomUser
+from ingener_op_app.models import IngenerInfo, Contract
+from student_op_app.models import Question, StudentInfo, Education, Answer
+from .forms import CourseForm, CourseVideoFormSet, IngenerCombinedForm, IngenerInfoForm, StudentUpdateForm, StudentCreationForm
+from django.http import JsonResponse, HttpResponse
+from django.contrib import messages
+from django.contrib.auth import logout, authenticate, login
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.urls import reverse
+import sys
+import traceback
+from django.contrib.auth import get_user_model
+import random
+import string
+import pandas as pd
+import openpyxl
+from django.conf import settings
+from datetime import date, timedelta
+import re
+
+def index(request):
+    form = IngenerInfoForm()
+    context = {'form': form}
+    
+    # Перевіряємо наявність помилок логіну в сесії
+    if 'login_error' in request.session:
+        error_type = request.session.pop('login_error')
+        if error_type == 'inactive':
+            context['inactive_account_message'] = 'Ваш акаунт ще не активовано. Будь ласка, дочекайтеся погодження адміністратором.'
+        
+        elif error_type == 'expired':
+            context['expired_account_message'] = 'Ваш термін договору завершився. Будь ласка, зверніться до адміністратора.'
+        elif error_type == 'invalid':
+            context['login_error_message'] = 'Невірний логін або пароль'
+        elif error_type == 'unknown':
+            context['login_error_message'] = 'Такого користувача не зареєстровано!'
+        elif error_type == 'no_contract':
+            context['login_error_message'] = 'У вас немає активного договору. Зверніться до адміністратора.'
+    return render(request, 'index.html', context)
+
+def register_view(request):
+    if request.method == 'POST':
+        form = IngenerInfoForm(request.POST)
+        if form.is_valid():
+            try:
+                ingener, user, password = form.save()
+                
+                # Використовуємо пароль, який ввів користувач
+                return render(request, 'index.html', {
+                    'form': IngenerInfoForm(),  # Новий екземпляр форми
+                    'generated_email': user.email,
+                    'password': password,
+                    'show_credentials': True
+                })
+            except forms.ValidationError as e:
+                messages.error(request, str(e))
+                return render(request, 'index.html', {'form': IngenerInfoForm(), 'has_form_errors': True})
+        else:
+            return render(request, 'index.html', {'form': IngenerInfoForm(), 'has_form_errors': True})
+    else:
+        form = IngenerInfoForm()
+    return render(request, 'index.html', {'form': form})
+
+def login_view(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        
+        # Спочатку перевіряємо, чи існує користувач з таким логіном
+        User = get_user_model()
+        
+        try:
+            user_obj = User.objects.get(username=username)
+            if not user_obj.is_active:
+                # Використовуємо сесію для зберігання повідомлення
+                request.session['login_error'] = 'inactive'
+                return redirect('index')
+        except User.DoesNotExist:
+            request.session['login_error'] = 'unknown'
+            return redirect('index')
+            
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            
+            # Перенаправлення в залежності від ролі користувача
+            if user.role == 'admin':
+                return redirect('admin_clients_list')
+            elif user.role == 'ingener':
+                return redirect('ingener_index')
+            elif user.role == 'student':
+                return redirect('students_index')
+            else:
+                return redirect('index')
+        else:
+            # Використовуємо сесію для зберігання повідомлення
+            request.session['login_error'] = 'invalid'
+            return redirect('index')
+    else:
+        return render(request, 'index.html', {'form': IngenerInfoForm()})
+
+def logout_view(request):
+    logout(request)
+    return redirect('index')
+
+# Курси
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def courses_list(request):
+    # Отримуємо параметр пошуку з URL
+    search_term = request.GET.get('search', '')
+    
+    # Базовий QuerySet
+    courses_list = Course.objects.all().prefetch_related('course_videos')
+    
+    # Застосовуємо фільтр пошуку, якщо він є
+    if search_term:
+        courses_list = courses_list.filter(course_name__icontains=search_term)
+    
+    # Пагінація: 10 курсів на сторінку
+    paginator = Paginator(courses_list, 10)
+    page = request.GET.get('page')
+    
+    try:
+        courses = paginator.page(page)
+    except PageNotAnInteger:
+        # Якщо параметр page не є цілим числом, показуємо першу сторінку
+        courses = paginator.page(1)
+    except EmptyPage:
+        # Якщо параметр page більший за кількість сторінок, показуємо останню
+        courses = paginator.page(paginator.num_pages)
+    
+    form = CourseForm()
+    formset = CourseVideoFormSet()
+    
+    context = {
+        'courses': courses,
+        'form': form,
+        'formset': formset,
+        'search_term': search_term  # Передаємо пошуковий запит у шаблон
+    }
+    return render(request, 'admin_app/admin_courses.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def courses_create(request):    
+    if request.method == 'POST':
+        form = CourseForm(request.POST)
+        formset = CourseVideoFormSet(request.POST)
+        if form.is_valid() and formset.is_valid():
+            course = form.save()
+            formset.instance = course
+            formset.save()
+            
+            # Повертаємо JSON відповідь для AJAX запиту
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': True})
+            return redirect('admin_courses_list')
+        else:
+            # Повертаємо помилки для AJAX запиту
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                errors = {**form.errors}
+                for i, form_errors in enumerate(formset.errors):
+                    if form_errors:
+                        errors[f'video_{i}'] = form_errors
+                return JsonResponse({'success': False, 'errors': errors})
+    else:
+        form = CourseForm()
+        formset = CourseVideoFormSet()
+    
+    context = {
+        'form': form,
+        'formset': formset
+    }
+    return render(request, 'admin_app/admin_courses.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def courses_update(request, course_id):
+    course = get_object_or_404(Course, id=course_id)
+    if request.method == 'POST':
+        form = CourseForm(request.POST, instance=course)
+        
+        # Отримуємо РЕАЛЬНУ кількість відео форм (замість того, що у TOTAL_FORMS)
+        num_videos = 0
+        for key in request.POST.keys():
+            if 'course_videos-' in key and '-video_url' in key:
+                num_videos += 1
+        
+        # Спочатку перевіряємо основну форму
+        if form.is_valid():
+            # Зберігаємо основні дані курсу
+            course = form.save()
+            
+            # Обробка видалених відео
+            deleted_videos = request.POST.get('deleted_videos', '')
+            if deleted_videos:
+                video_ids = [vid_id for vid_id in deleted_videos.split(',') if vid_id]
+                if video_ids:
+                    CourseVideo.objects.filter(id__in=video_ids).delete()
+            
+            # Обробляємо всі відео, знайдені у POST-запиті
+            for i in range(num_videos):
+                video_id = request.POST.get(f'course_videos-{i}-id', '')
+                video_url = request.POST.get(f'course_videos-{i}-video_url', '')
+                video_name = request.POST.get(f'course_videos-{i}-video_name', '')
+                
+                if video_url:
+                    if video_id:
+                        # Оновлюємо існуюче відео
+                        video = CourseVideo.objects.get(id=video_id)
+                        video.video_url = video_url
+                        video.video_name = video_name
+                        video.save()
+                    else:
+                        # Створюємо нове відео
+                        video = CourseVideo(course=course, video_url=video_url, video_name=video_name)
+                        video.save()
+            
+            # Повертаємо JSON відповідь для AJAX запиту
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': True})
+            return redirect('admin_courses_list')
+        else:            
+            # Повертаємо помилки для AJAX запиту
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                errors = {**form.errors}
+                return JsonResponse({'success': False, 'errors': errors})
+    else:
+        form = CourseForm(instance=course)
+        formset = CourseVideoFormSet(instance=course)
+    
+    context = {
+        'form': form,
+        'formset': formset,
+        'course': course
+    }
+    return render(request, 'admin_app/admin_courses.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def courses_delete(request, course_id):
+    if request.method == 'POST':
+        course = get_object_or_404(Course, id=course_id)
+        course.delete()
+        return JsonResponse({'success': True})
+    return JsonResponse({'success': False}, status=400)
+
+# Клієнти
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def clients_list(request):
+    # Отримуємо параметр пошуку з URL
+    search_term = request.GET.get('search', '')
+    
+    # Базовий QuerySet
+    ingeners_list = IngenerInfo.objects.all().order_by('-created_at')
+    
+    # Застосовуємо фільтр пошуку, якщо він є
+    if search_term:
+        ingeners_list = ingeners_list.filter(company_name__icontains=search_term)
+    
+    # Пагінація: 10 клієнтів на сторінку
+    paginator = Paginator(ingeners_list, 10)
+    page = request.GET.get('page')
+    
+    try:
+        ingeners = paginator.page(page)
+    except PageNotAnInteger:
+        # Якщо параметр page не є цілим числом, показуємо першу сторінку
+        ingeners = paginator.page(1)
+    except EmptyPage:
+        # Якщо параметр page більший за кількість сторінок, показуємо останню
+        ingeners = paginator.page(paginator.num_pages)
+    
+    # Додаємо статус договору для кожного інженера
+    today = date.today()
+    
+    for ingener in ingeners:
+        if hasattr(ingener, 'contract') and ingener.contract:
+            contract_end = ingener.contract.contract_end_date
+            days_remaining = (contract_end - today).days
+            
+            if days_remaining < 0:
+                ingener.contract_status = 'expired'
+                ingener.contract_status_text = 'Завершився'
+                ingener.contract_status_class = 'contract-expired'
+            elif days_remaining <= 7:
+                ingener.contract_status = 'expiring_soon'
+                ingener.contract_status_text = f'Завершиться через {days_remaining} дн.'
+                ingener.contract_status_class = 'contract-expiring-soon'
+            elif days_remaining <= 30:
+                ingener.contract_status = 'expiring'
+                ingener.contract_status_text = f'Завершиться через {days_remaining} дн.'
+                ingener.contract_status_class = 'contract-expiring'
+            else:
+                ingener.contract_status = 'active'
+                ingener.contract_status_text = f'Активний ({days_remaining} дн.)'
+                ingener.contract_status_class = 'contract-active'
+        else:
+            ingener.contract_status = 'no_contract'
+            ingener.contract_status_text = 'Немає договору'
+            ingener.contract_status_class = 'contract-no-contract'
+    
+    form = IngenerCombinedForm()  # Форма для додавання нового клієнта
+    edit_form = None  # Початково форма редагування відсутня
+    edit_id = None  # ID клієнта для редагування
+    
+    # Перевіряємо, чи є інформація про згенерований пароль в сесії
+    context = {
+        'ingeners': ingeners,
+        'form': form,
+        'edit_form': edit_form,
+        'edit_id': edit_id,
+        'search_term': search_term  # Передаємо пошуковий запит у шаблон
+    }
+    
+    # Додаємо інформацію про пароль, якщо вона є в сесії
+    if 'generated_password' in request.session and request.session.get('show_password_info'):
+        context['generated_password'] = request.session.pop('generated_password')
+        context['edited_user_email'] = request.session.pop('edited_user_email', '')
+        context['edited_user_name'] = request.session.pop('edited_user_name', '')
+        context['show_password_info'] = True
+        # Очищаємо прапорець і всі відповідні ключі сесії
+        request.session['show_password_info'] = False
+        if 'show_password_info' in request.session:
+            del request.session['show_password_info']
+        if 'generated_password' in request.session:
+            del request.session['generated_password']
+        if 'edited_user_email' in request.session:
+            del request.session['edited_user_email']
+        if 'edited_user_name' in request.session:
+            del request.session['edited_user_name']
+        # Зберігаємо зміни в сесії
+        request.session.modified = True
+    
+    return render(request, 'admin_app/admin_clients.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def clients_create(request):
+    if request.method == 'POST':
+        form = IngenerCombinedForm(request.POST)
+        context = {
+            'form': form,
+            'ingeners': IngenerInfo.objects.all()
+        }
+        
+        if form.is_valid():
+            try:
+                ingener, user, contract = form.save()
+                
+                # Перевіряємо, чи це AJAX запит
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    # Повертаємо JSON відповідь для AJAX запиту
+                    response_data = {
+                        'success': True,
+                        'message': 'Клієнта успішно додано!',
+                        'email': user.email,
+                    }
+                    
+                    # Додаємо пароль до відповіді, якщо він був згенерований
+                    if hasattr(form, 'generated_password') and form.generated_password:
+                        response_data['generated_password'] = form.generated_password
+                    
+                    return JsonResponse(response_data)
+                
+                # Стандартна обробка для не-AJAX запитів
+                if hasattr(form, 'generated_password') and form.generated_password:
+                    context = {
+                        'ingeners': IngenerInfo.objects.all(),
+                        'form': IngenerCombinedForm(),
+                        'email': user.email,
+                        'generated_password': form.generated_password,
+                        'show_credentials': True
+                    }
+                    return render(request, 'admin_app/admin_clients.html', context)
+                else:
+                    return redirect('admin_clients_list')
+                    
+            except forms.ValidationError as e:
+                # Перевіряємо, чи це AJAX запит
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': False,
+                        'errors': {'non_field_errors': [str(e)]},
+                        'message': str(e)
+                    })
+                
+                messages.error(request, str(e))
+                context['has_form_errors'] = True
+                return render(request, 'admin_app/admin_clients.html', context)
+        else:
+            # Форма не валідна - повертаємо помилки
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                # Для AJAX запитів повертаємо JSON з помилками
+                return JsonResponse({
+                    'success': False,
+                    'errors': form.errors,
+                    'message': 'Перевірте форму на наявність помилок'
+                })
+            
+            # Для звичайних запитів рендеримо сторінку з помилками
+            context['has_form_errors'] = True
+            return render(request, 'admin_app/admin_clients.html', context)
+    else:
+        form = IngenerCombinedForm()
+    
+    context = {
+        'form': form,
+        'ingeners': IngenerInfo.objects.all(),
+        'has_form_errors': False
+    }
+    return render(request, 'admin_app/admin_clients.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def clients_update(request, pk):
+    ingener = get_object_or_404(IngenerInfo, id=pk)
+    
+    if request.method == 'POST':
+        form = IngenerCombinedForm(request.POST)
+        form.instance = ingener
+        form.is_update = True
+        
+        if form.is_valid():
+            try:
+                ingener, user, contract = form.save()
+                # Перевіряємо чи існує атрибут generated_password перед доступом до нього
+                if hasattr(form, 'generated_password') and form.generated_password:
+                    context = {
+                        'ingeners': IngenerInfo.objects.all(),
+                        'form': IngenerCombinedForm(),
+                        'email': user.email,
+                        'generated_password': form.generated_password,
+                        'show_edit_modal': True
+                        # 'show_credentials': True
+                    }
+                    return render(request, 'admin_app/admin_clients.html', context)
+                return redirect('admin_clients_list')
+            except forms.ValidationError as e:
+                context = {
+                    'edit_form': form,
+                    'ingeners': IngenerInfo.objects.all(),
+                    'edit_id': pk,
+                    'show_edit_modal': True
+                }
+                return render(request, 'admin_app/admin_clients.html', context)
+        else:
+            context = {
+                'edit_form': form,
+                'ingeners': IngenerInfo.objects.all(),
+                'edit_id': pk,
+                'show_edit_modal': True
+            }
+            return render(request, 'admin_app/admin_clients.html', context)
+    else:
+        # Ініціалізуємо форму з початковими даними замість instance
+        initial_data = {
+            'company_name': ingener.company_name,
+            'code_edrpo': ingener.code_edrpo,
+            'first_name': ingener.user.first_name,
+            'last_name': ingener.user.last_name,
+            'email': ingener.user.email,
+            'phone_number': ingener.user.phone_number,
+            'edit_id': pk,  # Додаємо ID запису для перевірки унікальності
+        }
+        
+        # Якщо є контракт, додаємо його дані
+        if hasattr(ingener, 'contract'):
+            initial_data.update({
+                'contract_number': ingener.contract.contract_number,
+                'contract_end_date': ingener.contract.contract_end_date,
+            })
+            
+        form = IngenerCombinedForm(initial=initial_data)
+        form.is_update = True
+        form.instance = ingener
+    
+    # Отримуємо всі дані для відображення на сторінці
+    search_term = request.GET.get('search', '')
+    
+    # Базовий QuerySet
+    ingeners_list = IngenerInfo.objects.all().order_by('-created_at')
+    
+    # Застосовуємо фільтр пошуку, якщо він є
+    if search_term:
+        ingeners_list = ingeners_list.filter(company_name__icontains=search_term)
+    
+    # Пагінація: 10 клієнтів на сторінку
+    paginator = Paginator(ingeners_list, 10)
+    page = request.GET.get('page', 1)
+    
+    try:
+        ingeners = paginator.page(page)
+    except (PageNotAnInteger, EmptyPage):
+        ingeners = paginator.page(1)
+    
+    context = {
+        'edit_form': form,
+        'form': IngenerCombinedForm(),  # Додаємо пусту форму для додавання нового клієнта
+        'ingeners': ingeners,
+        'has_form_errors': False,
+        'edit_id': pk,  # Додаємо ID для позначення режиму редагування
+        'search_term': search_term,
+        'show_edit_modal': True  # Показуємо модальне вікно редагування
+    }
+    
+    return render(request, 'admin_app/admin_clients.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def clients_delete(request, pk):
+    client = get_object_or_404(IngenerInfo, id=pk)
+    user = client.user
+    if request.method == 'POST':
+        client.delete()
+        user.delete()
+        return redirect('admin_clients_list')
+    return render(request, 'admin_app/admin_clients_delete.html', {'client': client})
+
+# Студенти
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def students_list(request):
+    # Handle search queries
+    search_student = request.GET.get('search_student', '')
+    search_company = request.GET.get('search_company', '')
+    
+    # Filter students based on search parameters
+    students = StudentInfo.objects.all().order_by('-created_at')
+    
+    if search_student:
+        students = students.filter(
+            Q(user__first_name__icontains=search_student) | 
+            Q(user__last_name__icontains=search_student)
+        )
+    
+    if search_company:
+        students = students.filter(ingener__company_name__icontains=search_company)
+    
+    # Pagination
+    paginator = Paginator(students, 10)
+    page = request.GET.get('page')
+    students = paginator.get_page(page)
+    
+    # ВИПРАВЛЕНО: Додаємо курси та компанії у контекст + створюємо пусту форму для модального вікна
+    context = {
+        'students': students,
+        'search_student': search_student,
+        'search_company': search_company,
+        'courses': Course.objects.all(),
+        'ingeners': IngenerInfo.objects.all().order_by('company_name'),
+        'add_form': StudentCreationForm(),  # Додаємо пусту форму для модального вікна
+    }
+    
+    return render(request, 'admin_app/admin_students.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def students_create(request):    
+    if request.method == 'POST':
+        form = StudentCreationForm(request.POST)
+        
+        if form.is_valid():
+            try:
+                student, user = form.save()
+                messages.success(request, f"Слухача {user.first_name} {user.last_name} успішно додано!")
+                return redirect('students_list')
+            except forms.ValidationError as e:
+                messages.error(request, str(e))
+        
+        # Якщо форма невалідна або виникла помилка - повертаємо на ту ж сторінку з відкритим модальним вікном
+        students = StudentInfo.objects.all().order_by('-created_at')
+        paginator = Paginator(students, 10)
+        page = request.GET.get('page')
+        students = paginator.get_page(page)
+        
+        context = {
+            'students': students,
+            'courses': Course.objects.all(),
+            'ingeners': IngenerInfo.objects.all().order_by('company_name'),
+            'add_form': form,  # ВИПРАВЛЕНО: передаємо форму з помилками як add_form
+            'show_add_modal': True,  # Показуємо модальне вікно з помилками
+            'has_form_errors': True,
+        }
+        
+        return render(request, 'admin_app/admin_students.html', context)
+    else:
+        # GET request - перенаправляємо на список
+        return redirect('students_list')
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def students_update(request, pk):
+    student = get_object_or_404(StudentInfo, pk=pk)
+    edit_form = StudentUpdateForm(instance=student)
+    has_form_errors = False
+    courses = Course.objects.all()
+    # ДОДАНО: Отримуємо список компаній для випадаючого списку
+    ingeners = IngenerInfo.objects.all().order_by('company_name')
+    # Базовий QuerySet
+    students_list = StudentInfo.objects.all().order_by('-created_at')
+    # Пагінація
+    paginator = Paginator(students_list, 10)
+    page = request.GET.get('page')
+    students = paginator.get_page(page)
+    
+    if request.method == 'POST':
+        edit_form = StudentUpdateForm(request.POST, instance=student)
+        if edit_form.is_valid():
+            # Get form data
+            first_name = edit_form.cleaned_data.get('first_name')
+            last_name = edit_form.cleaned_data.get('last_name')
+            email = edit_form.cleaned_data.get('email')
+            position = edit_form.cleaned_data.get('position')
+            phone_number = edit_form.cleaned_data.get('phone_number')
+            company_id = edit_form.cleaned_data.get('company_name')
+            generate_new_password = edit_form.cleaned_data.get('generate_new_password')
+            courses_selected = request.POST.getlist('courses')
+            
+            # Update user information
+            user = student.user
+            user.first_name = first_name
+            user.last_name = last_name
+            user.email = email
+            user.username = email  # Make sure username is updated too
+            user.phone_number = phone_number
+            # Generate new password if requested
+            generated_password = None
+            if generate_new_password:
+                import random
+                import string
+                password = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(10))            
+                user.set_password(password)
+                generated_password = password
+            user.save()
+            
+            # Update student information
+            student.position = position
+            student.ingener_id = company_id
+            student.save()
+            
+            # Update courses
+            # First remove all existing courses
+            Education.objects.filter(student=student).delete()
+            
+            # Then add the selected courses
+            for course_id in courses_selected:
+                if course_id:
+                    try:
+                        course = Course.objects.get(id=course_id)
+                        Education.objects.create(
+                            student=student,
+                            course=course
+                        )
+                    except Course.DoesNotExist:
+                        pass
+            
+            # If password was generated, return success view
+            if generated_password:
+                return render(request, 'admin_app/admin_students.html', {
+                    'edit_form': edit_form,
+                    'edit_id': pk,
+                    'generated_password': generated_password,
+                    'courses': courses,
+                    'ingeners': ingeners,  # ДОДАНО
+                    'students': students,
+                })
+            
+            # Redirect to list view
+            # messages.success(request, "Інформацію про слухача успішно оновлено")
+            return redirect('students_list')
+        else:
+            # Form is invalid, show errors
+            has_form_errors = True
+            messages.error(request, "Перевірте форму на наявність помилок")
+    
+    # Render the form
+    return render(request, 'admin_app/admin_students.html', {
+        'edit_form': edit_form,
+        'edit_id': pk,
+        'has_form_errors': has_form_errors,
+        'courses': courses,
+        'ingeners': ingeners,  # ДОДАНО
+        'students': students,
+    })
+
+@login_required
+@user_passes_test(lambda u: u.is_superuser)
+def students_delete(request, pk):
+    student = get_object_or_404(StudentInfo, pk=pk)
+    
+    if request.method == 'POST':
+        # Delete the student
+        student.user.delete()  # This will cascade delete the student profile
+        return redirect('students_list')
+    
+    # Отримуємо базовий QuerySet для відображення студентів на фоні
+    search_student = request.GET.get('search_student', '')
+    search_company = request.GET.get('search_company', '')
+    
+    # Фільтруємо студентів на основі параметрів пошуку
+    students_list = StudentInfo.objects.all().order_by('-id')
+    
+    if search_student:
+        students_list = students_list.filter(
+            Q(user__first_name__icontains=search_student) | 
+            Q(user__last_name__icontains=search_student)
+        )
+    
+    if search_company:
+        students_list = students_list.filter(ingener__company_name__icontains=search_company)
+    
+    # Пагінація
+    paginator = Paginator(students_list, 10)
+    page = request.GET.get('page')
+    students = paginator.get_page(page)
+    
+    # Show confirmation page with student list in background
+    return render(request, 'admin_app/admin_students.html', {
+        'student': student,
+        'students': students,
+        'search_student': search_student,
+        'search_company': search_company,
+        'show_delete_modal': True,
+        'delete_id': pk
+    })
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def tests_list(request):
+    # Отримуємо параметр пошуку з URL
+    search_term = request.GET.get('search', '')
+    
+    # Базовий QuerySet
+    questions_list = Question.objects.all().select_related('course')
+    
+    # Застосовуємо фільтр пошуку, якщо він є
+    if search_term:
+        questions_list = questions_list.filter(question_text__icontains=search_term)
+    
+    # Пагінація: 10 запитань на сторінку
+    paginator = Paginator(questions_list, 10)
+    page = request.GET.get('page')
+    
+    try:
+        questions = paginator.page(page)
+    except PageNotAnInteger:
+        # Якщо параметр page не є цілим числом, показуємо першу сторінку
+        questions = paginator.page(1)
+    except EmptyPage:
+        # Якщо параметр page більший за кількість сторінок, показуємо останню
+        questions = paginator.page(paginator.num_pages)
+    
+    # Підготовка даних для відображення
+    questions_data = []
+    for question in questions:
+        answers = Answer.objects.filter(question=question)
+        correct_answer = answers.filter(is_correct=True).first()
+        incorrect_answers = answers.filter(is_correct=False)
+        
+        questions_data.append({
+            'question': question,
+            'correct_answer': correct_answer,
+            'incorrect_answers': incorrect_answers
+        })
+    
+    # Форми для додавання нового запитання
+    question_form = QuestionForm()
+    answer_formset = AnswerFormSet(prefix='answer_formset')
+    
+    # Перевіряємо наявність помилок імпорту в сесії
+    import_errors = None
+    if 'import_errors' in request.session:
+        import_errors = request.session.pop('import_errors')
+    
+    context = {
+        'questions': questions,
+        'questions_data': questions_data,
+        'question_form': question_form,
+        'answer_formset': answer_formset,
+        'search_term': search_term,  # Передаємо пошуковий запит у шаблон
+        'import_errors': import_errors  # Додаємо помилки імпорту в контекст
+    }
+    return render(request, 'admin_app/admin_tests.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def tests_create(request):
+    if request.method == 'POST':
+        form = QuestionForm(request.POST)
+        
+        if form.is_valid():
+            # Зберігаємо питання
+            question = form.save()
+            
+            # Отримуємо всі дані відповідей з POST-запиту
+            answers_data = []
+            answer_prefix = 'answer_formset-'
+            total_forms = 0
+            
+            # Рахуємо, скільки форм відповідей у нас є
+            for key in request.POST:
+                if key.startswith(answer_prefix) and key.endswith('-answer_text'):
+                    form_idx = key.split('-')[1]
+                    try:
+                        idx = int(form_idx)
+                        total_forms = max(total_forms, idx + 1)
+                    except ValueError:
+                        pass
+            
+            # Відстежуємо унікальні тексти відповідей, щоб уникнути дублікатів
+            unique_answers = set()
+            
+            # Обробляємо кожну форму відповідей
+            for i in range(total_forms):
+                answer_text = request.POST.get(f'{answer_prefix}{i}-answer_text', '').strip()
+                
+                # Пропускаємо порожні відповіді або дублікати
+                if not answer_text or answer_text in unique_answers:
+                    continue
+                
+                # Додаємо до унікального набору
+                unique_answers.add(answer_text)
+                
+                # Визначаємо правильність відповіді
+                is_correct = i == 0  # Перша відповідь завжди правильна
+                
+                # Створюємо нову відповідь
+                Answer.objects.create(
+                    question=question,
+                    answer_text=answer_text,
+                    is_correct=is_correct
+                )
+            
+            # Повертаємо успішний відповідь
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': True})
+            else:
+                return redirect('admin_tests_list')
+        else:
+            # Повертаємо помилки форми
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'errors': form.errors})
+            
+    # Якщо не POST або форма не валідна, рендеримо шаблон з формою
+    questions = Question.objects.all()
+    question_form = QuestionForm()
+    answer_formset = AnswerFormSet()
+    
+    context = {
+        'questions': questions,
+        'question_form': question_form,
+        'answer_formset': answer_formset
+    }
+    return render(request, 'admin_app/admin_tests.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def tests_update(request, test_id):
+    question = get_object_or_404(Question, id=test_id)
+    
+    if request.method == 'POST':
+        form = QuestionForm(request.POST, instance=question)
+        
+        # Обробляємо форму питання
+        if form.is_valid():
+            # Зберігаємо питання
+            question = form.save()
+            
+            # Обробляємо видалені відповіді
+            deleted_answers = request.POST.get('deleted_answers', '')
+            if deleted_answers:
+                answer_ids = [int(aid) for aid in deleted_answers.split(',') if aid]
+                if answer_ids:
+                    Answer.objects.filter(id__in=answer_ids).delete()
+            
+            # Спочатку видаляємо всі існуючі відповіді, щоб уникнути дублікатів
+            # Ми створимо їх наново на основі даних форми
+            Answer.objects.filter(question=question).delete()
+            
+            # Отримуємо всі дані відповідей з POST-запиту
+            answers_data = []
+            answer_prefix = 'answer_formset-'
+            total_forms = 0
+            
+            # Рахуємо, скільки форм відповідей у нас є
+            for key in request.POST:
+                if key.startswith(answer_prefix) and key.endswith('-answer_text'):
+                    form_idx = key.split('-')[1]
+                    try:
+                        idx = int(form_idx)
+                        total_forms = max(total_forms, idx + 1)
+                    except ValueError:
+                        pass
+            
+            # Відстежуємо унікальні тексти відповідей, щоб уникнути дублікатів
+            unique_answers = set()
+            
+            # Обробляємо кожну форму відповідей
+            for i in range(total_forms):
+                answer_text = request.POST.get(f'{answer_prefix}{i}-answer_text', '').strip()
+                
+                # Пропускаємо порожні відповіді або дублікати
+                if not answer_text or answer_text in unique_answers:
+                    continue
+                
+                # Додаємо до унікального набору
+                unique_answers.add(answer_text)
+                
+                # Визначаємо правильність відповіді (перша завжди правильна)
+                is_correct = i == 0
+                
+                # Створюємо нову відповідь
+                Answer.objects.create(
+                    question=question,
+                    answer_text=answer_text,
+                    is_correct=is_correct
+                )
+            
+            # Повертаємо успішний відповідь
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': True})
+            else:
+                return redirect('admin_tests_list')
+        else:
+            # Повертаємо помилки форми
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'errors': form.errors})
+    
+    # Якщо не POST або форма не валідна, рендеримо шаблон
+    questions = Question.objects.all()
+    question_form = QuestionForm()
+    answer_formset = AnswerFormSet()
+    
+    context = {
+        'questions': questions,
+        'question_form': question_form,
+        'answer_formset': answer_formset,
+        'courses': Course.objects.all(),  # Додаємо курси для випадаючого списку в формі редагування
+    }
+    
+    return render(request, 'admin_app/admin_tests.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def tests_delete(request, test_id):
+    print(f"Delete request received for test ID: {test_id}")
+    try:
+        question = get_object_or_404(Question, id=test_id)
+        print(f"Question found: {question.question_text}")
+    except Question.DoesNotExist:
+        print(f"Question with ID {test_id} not found")
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': False, 'error': f'Question with ID {test_id} not found'}, status=404)
+        else:
+            messages.error(request, f'Питання з ID {test_id} не знайдено')
+            return redirect('admin_tests_list')
+    
+    if request.method == 'POST':
+        try:
+            print(f"Processing POST request to delete question ID: {test_id}")
+            # Спочатку видаляємо всі пов'язані відповіді
+            answers = Answer.objects.filter(question=question)
+            print(f"Deleting {answers.count()} associated answers")
+            answers.delete()
+            
+            # Видаляємо питання
+            question.delete()
+            print(f"Питання з ID {test_id} успішно видалено")
+            
+            # Повертаємо успішний відповідь
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': True})
+            else:
+                return redirect('admin_tests_list')
+        except Exception as e:
+            print(f"Error deleting question: {str(e)}")
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({'success': False, 'error': str(e)}, status=500)
+            else:
+                messages.error(request, f'Помилка при видаленні: {str(e)}')
+                return redirect('admin_tests_list')
+    else:
+        print(f"Non-POST request received: {request.method}")
+        # Якщо не POST, повертаємо помилку "метод не дозволений" для AJAX-запитів
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': False, 'error': 'Method not allowed'}, status=405)
+    
+    # Якщо не POST або AJAX, рендеримо шаблон
+    questions = Question.objects.all()
+    question_form = QuestionForm()
+    answer_formset = AnswerFormSet()
+    
+    context = {
+        'questions': questions,
+        'question_form': question_form,
+        'answer_formset': answer_formset
+    }
+    
+    return render(request, 'admin_app/admin_tests.html', context)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def tests_delete_alt(request):
+    """Alternative delete method that takes question_id from POST data"""
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Only POST method is allowed'}, status=405)
+    
+    question_id = request.POST.get('question_id')
+    if not question_id:
+        return JsonResponse({'success': False, 'error': 'No question_id provided'}, status=400)
+    
+    try:
+        print(f"Alternative delete request for question ID: {question_id}")
+        question = get_object_or_404(Question, id=question_id)
+        
+        # Спочатку видаляємо всі пов'язані відповіді
+        answers = Answer.objects.filter(question=question)
+        print(f"Видаляємо {answers.count()} пов'язаних відповідей")
+        answers.delete()
+        
+        # Видаляємо питання
+        question.delete()
+        print(f"Питання з ID {question_id} успішно видалено")
+        
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': True})
+        else:
+            messages.success(request, 'Питання успішно видалено')
+            return redirect('admin_tests_list')
+            
+    except Question.DoesNotExist:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': False, 'error': f'Question with ID {question_id} not found'}, status=404)
+        else:
+            messages.error(request, f'Питання з ID {question_id} не знайдено')
+            return redirect('admin_tests_list')
+    except Exception as e:
+        print(f"Error in alternative delete: {str(e)}")
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': False, 'error': str(e)}, status=500)
+        else:
+            messages.error(request, f'Помилка при видаленні: {str(e)}')
+            return redirect('admin_tests_list')
+
+def debug_view(request, test_id=None):
+    """Debug view to help diagnose URL routing issues."""
+    try:
+        # Отримуємо інформацію про запит
+        path_info = request.path
+        method = request.method
+        headers = dict(request.headers)
+        query_params = dict(request.GET)
+        post_data = dict(request.POST)
+        
+        # Отримуємо інформацію про URL-диспетчер
+        from django.urls import get_resolver
+        resolver = get_resolver()
+        
+        # Спробуємо розв'язати поточний шлях
+        resolve_match = None
+        try:
+            from django.urls import resolve
+            resolve_match = resolve(path_info)
+            resolved_url_name = resolve_match.url_name
+            resolved_app = resolve_match.app_name
+            resolved_namespace = resolve_match.namespace
+            resolved_kwargs = resolve_match.kwargs
+            resolved_args = resolve_match.args
+            resolved_route = resolve_match.route
+        except Exception as e:
+            resolved_info = f"Error resolving URL: {str(e)}"
+        
+        # Отримуємо доступні URL-шаблони
+        def get_urls(urlpatterns, parent_path='', level=0):
+            urls = []
+            for pattern in urlpatterns:
+                if hasattr(pattern, 'pattern'):
+                    current_path = parent_path + str(pattern.pattern)
+                    if hasattr(pattern, 'callback') and pattern.callback:
+                        callback_name = pattern.callback.__name__
+                        urls.append({
+                            'pattern': current_path,
+                            'name': getattr(pattern, 'name', None),
+                            'callback': callback_name
+                        })
+                    if hasattr(pattern, 'url_patterns'):
+                        urls.extend(get_urls(pattern.url_patterns, current_path, level + 1))
+            return urls
+        
+        available_urls = get_urls(resolver.url_patterns)
+        
+        # Форматуємо інформацію для відлагодження
+        debug_info = {
+            'request': {
+                'path': path_info,
+                'method': method,
+                'headers': headers,
+                'query_params': query_params,
+                'post_data': post_data,
+            },
+            'test_id': test_id,
+            'resolved_url': {
+                'match_found': resolve_match is not None,
+                'url_name': getattr(resolve_match, 'url_name', None) if resolve_match else None,
+                'app_name': getattr(resolve_match, 'app_name', None) if resolve_match else None,
+                'namespace': getattr(resolve_match, 'namespace', None) if resolve_match else None,
+                'kwargs': getattr(resolve_match, 'kwargs', None) if resolve_match else None,
+                'args': getattr(resolve_match, 'args', None) if resolve_match else None,
+                'route': getattr(resolve_match, 'route', None) if resolve_match else None,
+            },
+            'available_urls': available_urls,
+        }
+        
+        return JsonResponse(debug_info)
+    except Exception as e:
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+        return HttpResponse(f"Error in debug view: {str(e)}\n\nTraceback:\n{''.join(tb_lines)}", 
+                           content_type='text/plain')
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def students_update_ajax(request, pk):
+    student = get_object_or_404(StudentInfo, pk=pk)
+    if request.method == 'POST':
+        form = StudentEducationForm(request.POST, instance=student)
+        
+        # Отримуємо список курсів з форми
+        courses = request.POST.getlist('courses')
+        
+        # Виводимо курси для діагностики
+        print(f"AJAX update received courses: {courses}")
+        
+        # Перевіряємо, чи вибрано хоча б один курс
+        if not courses:
+            return JsonResponse({
+                'success': False,
+                'message': 'Оберіть хоча б один напрямок навчання',
+                'errors': {'courses': ['Оберіть хоча б один напрямок навчання']}
+            })
+        
+        # Додаємо курси до форми
+        form.data = form.data.copy()
+        form.data.setlist('courses', courses)
+        
+        if form.is_valid():
+            # Перевіряємо, чи відмічено чекбокс для генерації нового пароля
+            generate_new_password = form.cleaned_data.get('generate_new_password', False)
+            
+            # Зберігаємо дані
+            student_info, user, education = form.save()
+            
+            # Перевіряємо, чи було згенеровано новий пароль
+            if hasattr(form, 'generated_password'):
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Слухача успішно оновлено з новим паролем!',
+                    'generated_password': form.generated_password,
+                    'email': user.email
+                })
+            else:
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Слухача успішно оновлено!'
+                })
+        else:
+            # Повертаємо помилки форми
+            print(f"Form errors: {form.errors}")
+            return JsonResponse({
+                'success': False,
+                'message': 'Виникли помилки при оновленні слухача',
+                'errors': form.errors
+            })
+    
+    # Метод GET не підтримується для цього ендпоінта
+    return JsonResponse({
+        'success': False,
+        'message': 'Метод не підтримується'
+    }, status=405)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def export_students_to_excel(request):
+    # Отримуємо параметри пошуку з URL для фільтрації
+    search_student = request.GET.get('search_student', '')
+    search_company = request.GET.get('search_company', '')
+    
+    # Базовий QuerySet з тими ж фільтрами, що і на сторінці списку
+    students_list = StudentInfo.objects.all()
+    
+    # Застосовуємо фільтри пошуку, якщо вони є
+    if search_student:
+        students_list = students_list.filter(
+            Q(user__first_name__icontains=search_student) | 
+            Q(user__last_name__icontains=search_student)
+        )
+    
+    if search_company:
+        students_list = students_list.filter(ingener__company_name__icontains=search_company)
+    
+    # Створюємо DataFrame для експорту
+    data = []
+    
+    for student in students_list:
+        # Отримуємо всі курси студента
+        courses = ", ".join([education.course.code for education in student.studies.all()])
+        
+        # Формуємо рядок з даними студента
+        student_data = {
+            'КОМПАНІЯ': student.ingener.company_name if student.ingener else '',
+            'ПІБ СЛУХАЧА': f"{student.user.first_name} {student.user.last_name}",
+            'E-MAIL': student.user.email,
+            'ПАРОЛЬ': settings.STUDENT_PASSWORD,
+            'ПОСАДА СЛУХАЧА': student.position,
+            'НАПРЯМОК НАВЧАННЯ': courses,
+            'ТЕЛЕФОН': student.user.phone_number if hasattr(student.user, 'phone_number') else ''
+        }
+        
+        data.append(student_data)
+    
+    # Створюємо DataFrame з даних
+    df = pd.DataFrame(data)
+    
+    # Створюємо Excel-файл в пам'яті
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = 'attachment; filename=students_export.xlsx'
+    
+    # Зберігаємо DataFrame в Excel
+    with pd.ExcelWriter(response, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='Слухачі')
+        
+        # Доступ до робочої книги та аркуша
+        workbook = writer.book
+        worksheet = writer.sheets['Слухачі']
+        
+        # Форматування ширини стовпців
+        for i, column in enumerate(df.columns):
+            column_width = max(len(column), df[column].astype(str).map(len).max())
+            worksheet.column_dimensions[chr(65 + i)].width = column_width + 4  # Додаємо відступ
+        
+        # Форматування заголовків (жирний шрифт)
+        for cell in worksheet[1]:
+            cell.font = openpyxl.styles.Font(bold=True)
+    
+    return response
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def import_students_from_excel(request):
+    if request.method == 'POST' and request.FILES.get('excel_file'):
+        excel_file = request.FILES['excel_file']
+        
+        # Очищаємо попередні помилки, якщо вони є
+        if 'import_errors' in request.session:
+            del request.session['import_errors']
+        
+        # Перевіряємо розширення файлу
+        if not excel_file.name.endswith(('.xlsx', '.xls')):
+            error_message = 'Будь ласка, завантажте файл Excel (.xlsx, .xls)'
+            
+            # Перевіряємо, чи це AJAX-запит
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': False, 
+                    'message': error_message,
+                    'errors': [error_message],
+                    'keep_modal_open': True,
+                    'modal_type': 'import'  # Додаємо тип модального вікна
+                })
+            
+            messages.error(request, error_message)
+            return redirect('students_list')
+        
+        try:
+            
+            # Обробка Excel файлу
+            df = pd.read_excel(excel_file)
+            
+            # Перевіряємо наявність необхідних колонок
+            required_columns = ['НАЗВА КОМПАНІЇ', 'ПІБ СЛУХАЧА', 'E-MAIL', 'ПОСАДА СЛУХАЧА', 'НАПРЯМОК НАВЧАННЯ']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            
+            if missing_columns:
+                error_message = f'У файлі відсутні обов\'язкові колонки: {", ".join(missing_columns)}'
+                
+                # Перевіряємо, чи це AJAX-запит
+                if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({
+                        'success': False, 
+                        'message': error_message,
+                        'errors': [error_message],
+                        'keep_modal_open': True,
+                        'modal_type': 'import'  # Додаємо тип модального вікна
+                    })
+                
+                messages.error(request, error_message)
+                return redirect('students_list')
+            
+            # Статистика для звіту
+            stats = {
+                'total': len(df),
+                'imported': 0,
+                'skipped': 0,
+                'errors': []
+            }
+            
+            # Обробка кожного рядка даних
+            for index, row in df.iterrows():
+                try:
+                    # ВИПРАВЛЕНО: Використовуємо знайдену назву колонки компанії
+                    # Перевіряємо, чи всі обов'язкові поля заповнені
+                    if (pd.isna(row['НАЗВА КОМПАНІЇ']) or pd.isna(row['ПІБ СЛУХАЧА']) or 
+                        pd.isna(row['E-MAIL']) or pd.isna(row['ПОСАДА СЛУХАЧА']) or 
+                        pd.isna(row['НАПРЯМОК НАВЧАННЯ'])):
+                        stats['skipped'] += 1
+                        stats['errors'].append(f"Рядок {index+2}: Не всі обов'язкові поля заповнені")
+                        continue
+                    
+                    # Розбираємо ПІБ на ім'я та прізвище
+                    full_name = str(row['ПІБ СЛУХАЧА']).strip()
+                    name_parts = full_name.split()
+                    
+                    if len(name_parts) >= 2:
+                        first_name = name_parts[0]
+                        last_name = ' '.join(name_parts[1:])
+                    else:
+                        first_name = full_name
+                        last_name = ""
+                    
+                    # Перевіряємо, чи існує користувач з таким email
+                    email = row['E-MAIL'].strip()
+                    if CustomUser.objects.filter(email=email).exists():
+                        stats['skipped'] += 1
+                        stats['errors'].append(f"Рядок {index+2}: Користувач з email '{email}' вже існує")
+                        continue
+
+                    company_name = row['НАЗВА КОМПАНІЇ'].strip()
+                    if not IngenerInfo.objects.filter(company_name=company_name).exists():
+                        stats['skipped'] += 1
+                        stats['errors'].append(f"Рядок {index+2}: Компанія '{company_name}' не знайдена в системі")
+                        continue
+                    
+                    # Перевіряємо курси
+                    course_codes = [code.strip() for code in str(row['НАПРЯМОК НАВЧАННЯ']).split(',')]
+                    valid_courses = []
+                    invalid_courses = []
+                    
+                    for code in course_codes:
+                        try:
+                            course = Course.objects.get(code=code)
+                            valid_courses.append(course)
+                        except Course.DoesNotExist:
+                            invalid_courses.append(code)
+
+                    
+                    if not valid_courses:
+                        stats['skipped'] += 1
+                        stats['errors'].append(f"Рядок {index+2}: Жоден з вказаних курсів не знайдено: {', '.join(course_codes)}")
+                        continue
+                    
+                    if invalid_courses:
+                        stats['errors'].append(f"Рядок {index+2}: Деякі курси не знайдені: {', '.join(invalid_courses)}")
+                    
+                    # Створюємо користувача
+                    # Генеруємо пароль
+                    password = settings.STUDENT_PASSWORD
+                    
+                    # Валідація телефону (якщо вказано)
+                    phone_number = str(row.get('ТЕЛЕФОН', '')).strip()
+                    if phone_number:
+                        # Прибираємо всі символи крім цифр
+                        phone_digits = re.sub(r'[^\d]', '', phone_number)
+                        
+                        # Перевіряємо українські формати: 380XXXXXXXXX або 0XXXXXXXXX
+                        if not (phone_digits.startswith('380') and len(phone_digits) == 12) and \
+                           not (phone_digits.startswith('0') and len(phone_digits) == 10):
+                            stats['errors'].append(f"Рядок {index+2}: Невірний формат телефону '{phone_number}'. Очікується: 380XXXXXXXXX або 0XXXXXXXXX")
+                            # Не пропускаємо запис, просто додаємо попередження
+                    
+                    # Створюємо користувача
+                    user = CustomUser.objects.create(
+                        username=email,
+                        email=email,
+                        first_name=first_name,
+                        last_name=last_name,
+                        phone_number=phone_number,  # Необов'язкове поле
+                        role='student'
+                    )
+                    user.set_password(password)
+                    user.save()
+
+                    ingener = IngenerInfo.objects.get(company_name=company_name)
+                    
+                    # Створюємо студента, прив'язаного до поточного інженера
+                    student = StudentInfo.objects.create(
+                        user=user,
+                        ingener=ingener,
+                        position=row['ПОСАДА СЛУХАЧА'],
+                        status='waiting_authorization'
+                    )
+                    
+                    # Додаємо курси
+                    for course in valid_courses:
+                        Education.objects.create(
+                            student=student,
+                            course=course
+                        )
+                    
+                    stats['imported'] += 1
+                    print(f"Успішно додано: {email}")  # Для діагностики
+                
+                except Exception as e:
+                    stats['skipped'] += 1
+                    # ВИПРАВЛЕНО: Покращуємо повідомлення про помилки унікальності
+                    error_str = str(e)
+                    if 'username_key' in error_str and 'вже існує' in error_str:
+                        # Витягуємо email з помилки
+                        email_match = re.search(r'\(([^)]+)\)', error_str)
+                        if email_match:
+                            duplicate_email = email_match.group(1)
+                            error_msg = f"Рядок {index+2}: Користувач з email '{duplicate_email}' вже існує в системі"
+                        else:
+                            error_msg = f"Рядок {index+2}: Користувач з таким email вже існує в системі"
+                    else:
+                        error_msg = f"Рядок {index+2}: {error_str}"
+                    
+                    stats['errors'].append(error_msg)
+                    print(f"Помилка в рядку {index+2}: {str(e)}")  # Для діагностики
+            
+            # Формуємо повідомлення про результати імпорту
+            success_message = f"Імпорт завершено. Додано {stats['imported']} з {stats['total']} слухачів."
+            
+            # Якщо були помилки, зберігаємо їх окремо для імпорту
+            if stats['errors']:
+                request.session['import_errors'] = stats['errors']
+            
+            # Перевіряємо, чи це AJAX-запит
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                # ВИПРАВЛЕНО: Повертаємо success=True тільки якщо немає помилок
+                return JsonResponse({
+                    'success': stats['imported'] > 0 and len(stats['errors']) == 0, 
+                    'message': success_message if len(stats['errors']) == 0 else f"Імпорт завершено з помилками. Додано {stats['imported']} з {stats['total']} слухачів.",
+                    'imported': stats['imported'],
+                    'total': stats['total'],
+                    'skipped': stats['skipped'],
+                    'has_errors': len(stats['errors']) > 0,
+                    'errors': stats['errors'],
+                    'keep_modal_open': True,
+                    'modal_type': 'import',  # Додаємо тип модального вікна
+                    'refresh_page': True  # Додаємо флаг для оновлення сторінки
+                })
+            
+            messages.success(request, success_message)
+            return redirect('students_list')
+        
+        except Exception as e:
+            error_message = f'Помилка при обробці файлу: {str(e)}'
+            
+            # Перевіряємо, чи це AJAX-запит
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'success': False, 
+                    'message': error_message,
+                    'errors': [error_message],
+                    'keep_modal_open': True,
+                    'modal_type': 'import'  # Додаємо тип модального вікна
+                })
+            
+            messages.error(request, error_message)
+            return redirect('students_list')
+    
+    # Якщо немає файлу або метод не POST
+    error_message = 'Будь ласка, виберіть файл для імпорту'
+    
+    # Перевіряємо, чи це AJAX-запит
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({
+            'success': False, 
+            'message': error_message,
+            'errors': [error_message],
+            'keep_modal_open': True,
+            'modal_type': 'import'  # Додаємо тип модального вікна
+        })
+    
+    messages.error(request, error_message)
+    return redirect('students_list')
+                    
+#                     # Перевіряємо, чи існує користувач з таким email
+#                     email = row['E-MAIL'].strip()
+#                     if CustomUser.objects.filter(email=email).exists():
+#                         stats['skipped'] += 1
+#                         stats['errors'].append(f"Рядок {index+2}: Користувач з email '{email}' вже існує")
+#                         continue
+                    
+#                     # Перевіряємо курси
+#                     course_codes = [code.strip() for code in str(row['НАПРЯМОК НАВЧАННЯ']).split(',')]
+#                     valid_courses = []
+#                     invalid_courses = []
+                    
+#                     for code in course_codes:
+#                         try:
+#                             course = Course.objects.get(code=code)
+#                             valid_courses.append(course)
+#                         except Course.DoesNotExist:
+#                             invalid_courses.append(code)
+                    
+#                     if not valid_courses:
+#                         stats['skipped'] += 1
+#                         stats['errors'].append(f"Рядок {index+2}: Жоден з вказаних курсів не знайдено в системі: {', '.join(course_codes)}")
+#                         continue
+                    
+#                     if invalid_courses:
+#                         stats['errors'].append(f"Рядок {index+2}: Деякі курси не знайдені: {', '.join(invalid_courses)}")
+                    
+#                     # Створюємо пароль для користувача
+#                     password = settings.STUDENT_PASSWORD
+                    
+#                     # Створюємо користувача
+#                     user = CustomUser.objects.create(
+#                         username=email,
+#                         email=email,
+#                         first_name=first_name,
+#                         last_name=last_name,
+#                         phone_number=row.get('ТЕЛЕФОН', ''),  # Необов'язкове поле
+#                         role='student'
+#                     )
+#                     user.set_password(password)
+#                     user.save()
+                    
+#                     # Створюємо студента
+#                     student = StudentInfo.objects.create(
+#                         user=user,
+#                         ingener=ingener,
+#                         position=row['ПОСАДА СЛУХАЧА']
+#                     )
+                    
+#                     # Додаємо курси
+#                     for course in valid_courses:
+#                         Education.objects.create(
+#                             student=student,
+#                             course=course,
+#                         )
+                    
+#                     stats['imported'] += 1
+                
+#                 except Exception as e:
+#                     stats['skipped'] += 1
+#                     stats['errors'].append(f"Рядок {index+2}: {str(e)}")
+            
+#             # Формуємо повідомлення про результати імпорту
+#             success_message = f"Імпорт завершено. Додано {stats['imported']} з {stats['total']} слухачів."
+#             messages.success(request, success_message)
+            
+#             # Якщо були помилки, додаємо їх до сесії для відображення
+#             if stats['errors']:
+#                 request.session['import_errors'] = stats['errors']
+            
+#             # Перевіряємо, чи це AJAX-запит
+#             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+#                 return JsonResponse({
+#                     'success': True, 
+#                     'message': success_message,
+#                     'imported': stats['imported'],
+#                     'total': stats['total'],
+#                     'has_errors': len(stats['errors']) > 0,
+#                     'errors': stats['errors'],
+#                     'available_companies': available_companies
+#                 })
+            
+#             return redirect('students_list')
+        
+#         except Exception as e:
+#             error_message = f'Помилка при обробці файлу: {str(e)}'
+#             messages.error(request, error_message)
+#             request.session['import_errors'] = [error_message]
+            
+#             # Перевіряємо, чи це AJAX-запит
+#             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+#                 return JsonResponse({
+#                     'success': False, 
+#                     'message': error_message,
+#                     'errors': [error_message]
+#                 })
+                
+#             return redirect('students_list')    
+#     error_message = 'Будь ласка, виберіть файл для імпорту'
+#     messages.error(request, error_message)
+    
+#     # Перевіряємо, чи це AJAX-запит
+#     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+#         return JsonResponse({
+#             'success': False, 
+#             'message': error_message,
+#             'errors': [error_message]
+#         })
+        
+#     return redirect('students_list')
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def clear_import_errors(request):
+    """Очищує помилки імпорту зі сесії"""
+    if request.method == 'POST':
+        if 'import_errors' in request.session:
+            del request.session['import_errors']
+        return JsonResponse({'success': True})
+    
+    return JsonResponse({'success': False, 'message': 'Метод не підтримується'}, status=405)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def get_import_errors(request):
+    """Повертає помилки імпорту з сесії у форматі JSON"""
+    errors = request.session.get('import_errors', [])
+    return JsonResponse({
+        'has_errors': len(errors) > 0,
+        'errors': errors
+    })
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def import_tests_from_excel(request):
+    if request.method == 'POST' and request.FILES.get('excel_file'):
+        excel_file = request.FILES['excel_file']
+        course_id = request.POST.get('course_id')
+        
+        # Перевіряємо, чи вибрано курс
+        if not course_id:
+            messages.error(request, 'Необхідно вибрати курс для імпорту запитань')
+            return redirect('admin_tests_list')
+        
+        try:
+            course = Course.objects.get(id=course_id)
+        except Course.DoesNotExist:
+            messages.error(request, 'Вибраний курс не існує')
+            return redirect('admin_tests_list')
+        
+        # Перевіряємо розширення файлу
+        if not excel_file.name.endswith(('.xlsx', '.xls', '.csv')):
+            messages.error(request, 'Підтримуються тільки файли Excel (.xlsx, .xls) або CSV (.csv)')
+            return redirect('admin_tests_list')
+        
+        try:
+            # Обробка відповідно до типу файлу
+            if excel_file.name.endswith('.csv'):
+                # Обробка CSV файлу
+                df = pd.read_csv(excel_file, encoding='utf-8')
+            else:
+                # Обробка Excel файлу
+                df = pd.read_excel(excel_file)
+            
+            # Перевіряємо наявність необхідних колонок
+            required_columns = ['ЗАПИТАННЯ', 'ПРАВИЛЬНА ВІДПОВІДЬ']
+            missing_columns = [col for col in required_columns if col not in df.columns]
+            
+            if missing_columns:
+                error_message = f'У файлі відсутні обов\'язкові колонки: {", ".join(missing_columns)}'
+                messages.error(request, error_message)
+                return redirect('admin_tests_list')
+            
+            # Статистика для звіту
+            stats = {
+                'total': len(df),
+                'imported': 0,
+                'skipped': 0,
+                'errors': []
+            }
+            
+            # Обробка кожного рядка даних
+            for index, row in df.iterrows():
+                try:
+                    # Перевіряємо, чи всі обов'язкові поля заповнені
+                    if pd.isna(row['ЗАПИТАННЯ']) or pd.isna(row['ПРАВИЛЬНА ВІДПОВІДЬ']):
+                        stats['skipped'] += 1
+                        stats['errors'].append(f"Рядок {index+2}: Не всі обов'язкові поля заповнені")
+                        continue
+                    
+                    # Отримуємо текст запитання і правильної відповіді
+                    question_text = str(row['ЗАПИТАННЯ']).strip()
+                    correct_answer_text = str(row['ПРАВИЛЬНА ВІДПОВІДЬ']).strip()
+                    
+                    # Перевіряємо, чи існує запитання з таким текстом
+                    if Question.objects.filter(question_text=question_text, course=course).exists():
+                        stats['skipped'] += 1
+                        stats['errors'].append(f"Рядок {index+2}: Запитання з текстом '{question_text}' вже існує в курсі")
+                        continue
+                    
+                    # Створюємо нове запитання
+                    question = Question.objects.create(
+                        course=course,
+                        question_text=question_text
+                    )
+                    
+                    # Додаємо правильну відповідь
+                    Answer.objects.create(
+                        question=question,
+                        answer_text=correct_answer_text,
+                        is_correct=True
+                    )
+                    
+                    # Збираємо всі інші відповіді
+                    answer_columns = [
+                        'ВІДПОВІДЬ 1', 'ВІДПОВІДЬ 2', 'ВІДПОВІДЬ 3', 'ВІДПОВІДЬ 4',
+                        'ВІДПОВІДЬ 5', 'ВІДПОВІДЬ 6', 'ВІДПОВІДЬ 7', 'ВІДПОВІДЬ 8'
+                    ]
+                    
+                    # Множина для унікальних відповідей
+                    unique_answers = {correct_answer_text}
+                    
+                    # Додаємо інші відповіді
+                    for col in answer_columns:
+                        if col in df.columns and not pd.isna(row[col]):
+                            answer_text = str(row[col]).strip()
+                            if answer_text and answer_text not in unique_answers:
+                                Answer.objects.create(
+                                    question=question,
+                                    answer_text=answer_text,
+                                    is_correct=False
+                                )
+                                unique_answers.add(answer_text)
+                    
+                    stats['imported'] += 1
+                
+                except Exception as e:
+                    stats['skipped'] += 1
+                    stats['errors'].append(f"Рядок {index+2}: {str(e)}")
+            
+            # Зберігаємо помилки в сесії, якщо вони є
+            if stats['errors']:
+                request.session['import_errors'] = stats['errors']
+            
+            # Формуємо повідомлення про результати імпорту
+            success_message = f"Імпорт завершено. Додано {stats['imported']} з {stats['total']} запитань."
+            messages.success(request, success_message)
+            
+            # Завжди перенаправляємо на сторінку списку тестів
+            return redirect('admin_tests_list')
+            
+        except Exception as e:
+            error_message = f'Помилка при обробці файлу: {str(e)}'
+            messages.error(request, error_message)
+            return redirect('admin_tests_list')
+    
+    # Якщо немає файлу або метод не POST
+    messages.error(request, 'Будь ласка, виберіть файл для імпорту')
+    return redirect('admin_tests_list')
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def mark_client_as_seen(request, pk):
+    """Позначає клієнта як переглянутого (не новий)"""
+    if request.method == 'POST':
+        try:
+            ingener = IngenerInfo.objects.get(id=pk)
+            ingener.is_new_registration = False
+            ingener.save()
+            print(f"Клієнт {ingener.company_name} помічений як переглянутий через API.")
+            return JsonResponse({'success': True})
+        except Exception as e:
+            print(f"Помилка при позначенні клієнта як переглянутого: {str(e)}")
+            return JsonResponse({'success': False, 'error': str(e)})
+    return JsonResponse({'success': False, 'error': 'Метод не підтримується'})
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def students_add_ajax(request):
+    """
+    Обробляє AJAX запити для додавання нових слухачів.
+    """
+    if request.method != 'POST':
+        return JsonResponse({
+            'success': False,
+            'message': 'Метод не підтримується'
+        }, status=405)
+    
+    # Перевіряємо, чи це AJAX запит
+    if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
+        return JsonResponse({
+            'success': False,
+            'message': 'Неприпустимий запит'
+        }, status=400)
+    
+    form = StudentEducationForm(request.POST)
+    
+    # Отримуємо список курсів з форми
+    courses = request.POST.getlist('courses')
+    
+    # Виводимо курси для діагностики
+    print(f"AJAX add received courses: {courses}")
+    
+    # Перевіряємо, чи вибрано хоча б один курс
+    if not courses:
+        return JsonResponse({
+            'success': False,
+            'message': 'Оберіть хоча б один напрямок навчання',
+            'errors': {'courses': ['Оберіть хоча б один напрямок навчання']}
+        })
+    
+    # Додаємо курси до форми
+    form.data = form.data.copy()
+    form.data.setlist('courses', courses)
+    
+    # Перевіряємо валідність форми
+    if form.is_valid():
+        # Зберігаємо дані
+        student, user, educations = form.save()
+        
+        # Повертаємо JSON відповідь з даними користувача
+        return JsonResponse({
+            'success': True,
+            'message': 'Слухача успішно додано!',
+            'id': student.id,
+            'email': user.email,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'company_name': student.ingener.company_name if student.ingener else '',
+            'position': student.position,
+            'generated_password': form.generated_password
+        })
+    else:
+        # Додаємо логування помилок форми
+        print(f"AJAX add form errors: {form.errors}")
+        
+        return JsonResponse({
+            'success': False,
+            'message': 'Виправте помилки у формі',
+            'errors': form.errors
+        })
+
+# Додаємо новий метод для отримання даних слухача перед редагуванням
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def get_student_data(request, pk):
+    student = get_object_or_404(StudentInfo, pk=pk)
+    
+    try:
+        # Готуємо дані про курси
+        courses_data = []
+        for education in student.studies.all():
+            courses_data.append({
+                'id': education.course.id,
+                'code': education.course.code,
+                'name': education.course.course_name
+            })
+        
+        # Готуємо всі доступні курси для вибору
+        all_courses = []
+        for course in Course.objects.all():
+            all_courses.append({
+                'id': course.id,
+                'code': course.code,
+                'name': course.course_name
+            })
+        
+        # Форматуємо дату контракту, якщо вона є
+        contract_end_date = None
+        if hasattr(student, 'contract_end_date') and student.contract_end_date:
+            contract_end_date = student.contract_end_date.strftime('%Y-%m-%d')
+        
+        # Форматуємо кінцеву дату, якщо вона є
+        end_date = None
+        if hasattr(student, 'end_date') and student.end_date:
+            end_date = student.end_date.strftime('%Y-%m-%d')
+            
+        # Повертаємо дані в форматі JSON
+        return JsonResponse({
+            'success': True,
+            'id': student.id,
+            'first_name': student.user.first_name,
+            'last_name': student.user.last_name,
+            'position': student.position,
+            'email': student.user.email,
+            'company_name': student.ingener.id if student.ingener else None,
+            'company_display_name': student.ingener.company_name if student.ingener else "",
+            'contract_end_date': contract_end_date,
+            'end_date': end_date,
+            'status': student.status if hasattr(student, 'status') else None,
+            'courses': courses_data,
+            'all_courses': all_courses
+        })
+    except Exception as e:
+        # Обробка помилок
+        import traceback
+        print(f"Error in get_student_data: {str(e)}")
+        print(traceback.format_exc())
+        return JsonResponse({
+            'success': False,
+            'message': str(e)
+        }, status=500)
+
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def students_delete(request, pk):
+    student = get_object_or_404(StudentInfo, pk=pk)
+    
+    if request.method == 'POST':
+        # Delete the student
+        student.user.delete()  # This will cascade delete the student profile
+        return redirect('students_list')
+    
+    # Отримуємо базовий QuerySet для відображення студентів на фоні
+    search_student = request.GET.get('search_student', '')
+    search_company = request.GET.get('search_company', '')
+    
+    # Фільтруємо студентів на основі параметрів пошуку
+    students_list = StudentInfo.objects.all().order_by('-id')
+    
+    if search_student:
+        students_list = students_list.filter(
+            Q(user__first_name__icontains=search_student) | 
+            Q(user__last_name__icontains=search_student)
+        )
+    
+    if search_company:
+        students_list = students_list.filter(ingener__company_name__icontains=search_company)
+    
+    # Пагінація
+    paginator = Paginator(students_list, 10)
+    page = request.GET.get('page')
+    students = paginator.get_page(page)
+    
+    # Show confirmation page with student list in background
+    return render(request, 'admin_app/admin_students.html', {
+        'student': student,
+        'students': students,
+        'search_student': search_student,
+        'search_company': search_company,
+        'show_delete_modal': True,
+        'delete_id': pk
+    })
+
+def generate_password():
+    # Генеруємо випадковий пароль
+    length = 12
+    chars = string.ascii_letters + string.digits + string.punctuation
+    return ''.join(random.choice(chars) for _ in range(length))
+
+# Тимчасова функція для створення тестової компанії
+@login_required
+@user_passes_test(lambda u: u.role == 'admin')
+def create_test_company(request):
+    if request.method == "POST":
+        company_name = request.POST.get('company_name')
+        if not company_name:
+            messages.error(request, "Необхідно вказати назву компанії")
+            return redirect('students_list')
+            
+        # Перевіряємо, чи вже існує така компанія
+        if IngenerInfo.objects.filter(company_name=company_name).exists():
+            messages.error(request, f"Компанія '{company_name}' вже існує")
+            return redirect('students_list')
+            
+        # Створюємо нового користувача інженера
+        email = f"test_{company_name.lower().replace(' ', '_')}@example.com"
+        password = settings.STUDENT_PASSWORD
+        
+        user = CustomUser.objects.create(
+            username=email,
+            email=email,
+            first_name="Тест",
+            last_name=company_name,
+            role='ingener'
+        )
+        user.set_password(password)
+        user.save()
+        
+        # Створюємо компанію
+        ingener = IngenerInfo.objects.create(
+            user=user,
+            company_name=company_name,
+            code_edrpo=f"TEST{random.randint(10000, 99999)}"
+        )
+        
+        messages.success(request, f"Тестову компанію '{company_name}' успішно створено!")
+        return redirect('students_list')
+        
+    # GET запит - показуємо форму
+    return render(request, 'admin_app/create_test_company.html')

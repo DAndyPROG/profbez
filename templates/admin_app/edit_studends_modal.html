@@ -1,0 +1,138 @@
+<!-- Modal template for editing students -->
+<div class="modal-content">
+    <div class="modal-header">
+        <h2>Редагувати слухача</h2>
+        <a href="{% url 'students_list' %}" class="close">✖</a>
+    </div>
+    <div class="modal-body">
+        {% if generated_password %}
+        <!-- Password information if it was generated -->
+        <div class="alert alert-success credentials-container">
+            <h3>Згенеровано новий пароль для <strong>{{ edit_form.fields.email.initial }}</strong></h3>
+            <p><strong>Пароль:</strong> {{ generated_password }}</p>
+        </div>
+        {% else %}
+        <form id="editStudentForm" method="POST" action="{% url 'students_update' edit_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="has_form_errors" value="{{ has_form_errors|yesno:'True,False' }}">
+            <div class="form-group">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="{{ edit_form.first_name.id_for_label }}">{{ edit_form.first_name.label }}:</label>
+                        <input type="text" name="first_name" value="{{ edit_form.first_name.value|default:'' }}" class="form-control" placeholder="Введіть ім'я">
+                        {{ edit_form.first_name.errors }}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ edit_form.last_name.id_for_label }}">{{ edit_form.last_name.label }}:</label>
+                        <input type="text" name="last_name" value="{{ edit_form.last_name.value|default:'' }}" class="form-control" placeholder="Введіть прізвище">
+                        {{ edit_form.last_name.errors }}
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="{{ edit_form.email.id_for_label }}">{{ edit_form.email.label }}:</label>
+                        <input type="email" name="email" value="{{ edit_form.email.value|default:'' }}" class="form-control" placeholder="Введіть email">
+                        {{ edit_form.email.errors }}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ edit_form.position.id_for_label }}">{{ edit_form.position.label }}:</label>
+                        <input type="text" name="position" value="{{ edit_form.position.value|default:'' }}" class="form-control" placeholder="Введіть посаду">
+                        {{ edit_form.position.errors }}
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="{{ edit_form.phone_number.id_for_label }}">{{ edit_form.phone_number.label }}:</label>
+                        <input type="text" name="phone_number" value="{{ edit_form.phone_number.value|default:'' }}" class="form-control" placeholder="380XXXXXXXXX або 0XXXXXXXXX">
+                        {{ edit_form.phone_number.errors }}
+                    </div>
+                    <div class="form-group">
+                        <label for="{{ edit_form.company_name.id_for_label }}">{{ edit_form.company_name.label }}:</label>
+                        <select name="company_name" id="edit_company_name" class="form-control">
+                            <option value="">Оберіть компанію</option>
+                            {% for ingener in ingeners %}
+                                <option value="{{ ingener.id }}" 
+                                    {% if edit_form.company_name.value %}
+                                        {% if ingener.id|stringformat:"s" == edit_form.company_name.value|stringformat:"s" %}selected{% endif %}
+                                    {% elif edit_form.instance.ingener.id == ingener.id %}
+                                        selected
+                                    {% endif %}>
+                                    {{ ingener.company_name }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                        {{ edit_form.company_name.errors }}
+                    </div>
+                </div>
+                
+                <!-- Password generation section -->
+                {% for field in edit_form %}
+                    {% if field.name == 'generate_new_password' %}
+                    <div class="form-row">
+                        <div class="form-group password-checkbox">
+                            {{ field }}
+                            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                            <small>
+                                Якщо відмічено, для користувача буде згенеровано новий пароль
+                            </small>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+                
+                <!-- Courses container -->
+                <div class="course-container">
+                    <h3>Напрямок навчання:</h3>
+                    <div id="edit_courses_container">
+                        {% with student_courses=edit_form.instance.studies.all %}
+                            {% if student_courses %}
+                                {% for education in student_courses %}
+                                    <div class="course-form">
+                                        <div class="course-inputs-row">
+                                            <div class="course-url-field">
+                                                <select name="courses" class="form-control course-select">
+                                                    <option value="">Оберіть курс</option>
+                                                    {% for course in courses %}
+                                                        <option value="{{ course.id }}" {% if course.id == education.course.id %}selected{% endif %}>
+                                                            {{ course.code }} - {{ course.course_name }}
+                                                        </option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div class="course-action-field">
+                                                <button type="button" class="remove-course delete-btn">✖</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            {% else %}
+                                <div class="course-form">
+                                    <div class="course-inputs-row">
+                                        <div class="course-url-field">
+                                            <select name="courses" class="form-control course-select">
+                                                <option value="">Оберіть курс</option>
+                                                {% for course in courses %}
+                                                    <option value="{{ course.id }}">{{ course.code }} - {{ course.course_name }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div class="course-action-field">
+                                            <button type="button" class="remove-course delete-btn">✖</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endwith %}
+                    </div>
+                    <button type="button" id="addMoreEditCourse" class="secondary-btn">+ Додати ще один курс</button>
+                </div>
+            </div>
+            
+            <div class="form-actions">
+                <a href="{% url 'students_list' %}" class="cancel-btn">Скасувати</a>
+                <button type="submit" class="add-btn green-btn">Зберегти</button>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+</div>

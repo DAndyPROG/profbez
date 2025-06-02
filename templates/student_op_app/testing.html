@@ -1,0 +1,659 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Тестування - {{ course.course_name }}</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f5f5f5;
+      margin: 0;
+      padding: 0;
+    }
+    .container-fluid {
+      padding: 0;
+    }
+    .header {
+      width: 100%;
+      padding: 0.5rem 1rem;
+      background-color: #fff;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .header-logo {
+      height: 40px;
+    }
+    .test-container {
+      display: flex;
+      min-height: calc(100vh - 80px);
+    }
+    .sidebar {
+      width: 300px;
+      background-color: #fff;
+      border-right: 1px solid #ddd;
+      box-shadow: 2px 0 5px rgba(0,0,0,0.05);
+      padding: 1.5rem;
+    }
+    .main-content {
+      flex: 1;
+      padding: 2rem;
+    }
+    .question-nav {
+      margin-top: 1.5rem;
+    }
+    .question-buttons {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      margin-top: 1rem;
+    }
+    .question-button {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 4px;
+      background-color: #eee;
+      color: #333;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .question-button:hover {
+      background-color: #ddd;
+    }
+    .question-button.answered {
+      background-color: #adb5bd;
+      color: #ffffff;
+    }
+    .question-button.current {
+      background-color: #e54c4c;
+      color: white;
+    }
+    .attempts-info {
+      margin-top: 2rem;
+      padding: 1rem;
+      background-color: #f8f9fa;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    .test-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+    .test-progress {
+      height: 8px;
+      margin-bottom: 2rem;
+    }
+    .question-card {
+      background-color: #fff;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      padding: 2rem;
+    }
+    .question-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      color: #333;
+    }
+    .answers-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .answer-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+    .answer-label {
+      display: flex;
+      align-items: center;
+      padding: 1rem;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      transition: all 0.2s;
+      cursor: pointer;
+      margin-left: 10px;
+      width: 100%;
+    }
+    .answer-label:hover {
+      background-color: #f8f9fa;
+      border-color: #c3c3c3;
+    }
+    .answer-radio {
+      margin-right: 1rem;
+      cursor: pointer;
+    }
+    input[type="radio"] {
+      width: 18px;
+      height: 18px;
+    }
+    input[type="radio"]:checked + .answer-label {
+      border-color: #6c757d;
+      background-color: #f9f9fa;
+    }
+    .navigation-buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 2rem;
+    }
+    .nav-button {
+      padding: 0.75rem 1.5rem;
+      border-radius: 4px;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .nav-button.prev {
+      background-color: #f8f9fa;
+      color: #333;
+      border: 1px solid #ddd;
+    }
+    .nav-button.next, .nav-button.finish {
+      background-color: #e54c4c;
+      color: white;
+      border: 1px solid #e54c4c;
+    }
+    .nav-button.prev:hover {
+      background-color: #e9ecef;
+    }
+    .nav-button.next:hover, .nav-button.finish:hover {
+      background-color: #d13838;
+    }
+    .progress {
+      --bs-progress-height: 8px;
+    }
+    
+    .timer-container {
+      padding: 1rem;
+      background-color: #f8f9fa;
+      border-radius: 8px;
+      border: 1px solid #ddd;
+    }
+    
+    .timer-display {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #e54c4c;
+      text-align: center;
+      padding: 0.5rem;
+      background-color: #fff;
+      border-radius: 4px;
+      border: 2px solid #e54c4c;
+    }
+    
+    .timer-display.warning {
+      color: #ff6b35;
+      border-color: #ff6b35;
+      animation: pulse 1s infinite;
+    }
+    
+    .timer-display.danger {
+      color: #dc3545;
+      border-color: #dc3545;
+      animation: pulse 0.5s infinite;
+    }
+    
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.7; }
+      100% { opacity: 1; }
+    }
+    
+    @media (max-width: 992px) {
+      .test-container {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #ddd;
+      }
+    }
+  </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <!-- Header -->
+        <div class="header">
+            <div class="d-flex align-items-center">
+                <a href="{% url 'students_index' %}">
+                    <img src="{% static 'img/logo.jpg' %}" alt="Logo" class="header-logo me-3" />
+                </a>
+                <div>
+                    <h5 class="mb-0">НАВЧАЛЬНО-ВИРОБНИЧИЙ ЦЕНТР</h5>
+                    <h4 class="fw-bold">Професійна безпека</h4>
+                </div>
+                <div class="ms-auto user-controls">
+                    <span class="user-greeting">{{ request.user.first_name }} {{ request.user.last_name }}</span>
+                    <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">
+                        <i class="bi bi-box-arrow-right"></i> Вийти
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Test Container -->
+        <div class="test-container">
+            <!-- Sidebar with Question Navigation -->
+            <div class="sidebar">
+                <h5>{{ course.course_name }}</h5>
+                <p class="text-muted">Тестування</p>
+                
+                <!-- Timer Display -->
+                <div class="timer-container mb-3">
+                    <h6><i class="bi bi-clock"></i> Час, що залишився:</h6>
+                    <div id="timer" class="timer-display">30:00</div>
+                    <div class="progress mt-2" style="height: 6px;">
+                        <div id="timer-progress" class="progress-bar bg-warning" role="progressbar" style="width: 100%"></div>
+                    </div>
+                </div>
+                
+                <div class="question-nav">
+                    <h6>Питання ({{ answered_questions_count }}/{{ total_questions }})</h6>
+                    <div class="question-buttons">
+                        {% for question_status in questions_status %}
+                            <a href="{% url 'students_testing' %}?test_id={{ test.id }}&question_id={{ question_status.id }}" 
+                               class="question-button {% if question_status.answered %}answered{% endif %} {% if question_status.current %}current{% endif %}">
+                                {{ question_status.number }}
+                            </a>
+                        {% endfor %}
+                    </div>
+                </div>
+                
+                <div class="attempts-info">
+                    <h6>Інформація про спроби</h6>
+                    <p class="mb-1 d-flex justify-content-between">
+                        <span>Поточна спроба:</span> 
+                        <strong class="text-danger"></strong>
+                    </p>
+                    <div class="progress mb-2" style="height: 6px;">
+                        <div class="progress-bar bg-danger" role="progressbar" 
+                             style="width: {% widthratio test.attempts max_attempts 100 %}%" 
+                             aria-valuenow="{{ test.attempts }}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="{{ max_attempts }}"></div>
+                    </div>
+                    <small class="text-muted">Для успішного проходження потрібно набрати 60% правильних відповідей</small>
+                    
+                    {% if total_questions > 20 %}
+                    <div class="mt-3">
+                        <a href="{% url 'students_testing' %}?education_id={{ education.id }}&start_new=true" 
+                           class="btn btn-outline-warning btn-sm w-100"
+                           onclick="return confirm('Ви впевнені, що хочете почати тест заново з 20 випадковими питаннями?')">
+                            <i class="bi bi-arrow-repeat"></i> Перезапустити з 20 питаннями
+                        </a>
+                        <a href="{% url 'reset_test_questions' %}?test_id={{ test.id }}" 
+                           class="btn btn-outline-info btn-sm w-100 mt-2"
+                           onclick="return confirm('Ви впевнені, що хочете скинути поточний тест до 20 питань?')">
+                            <i class="bi bi-shuffle"></i> Скинути до 20 питань
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                {% if next_question_id == None and total_questions > 0 %}
+                <div class="mt-4">
+                    <a href="{% url 'tests_results' %}?test_id={{ test.id }}" class="btn btn-danger w-100">
+                        Завершити тестування
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Main Content -->
+            <div class="main-content">
+                <div class="test-info">
+                    <h4>Питання {{ current_question_num }} з {{ total_questions }}</h4>
+                    
+                </div>
+                
+                <div class="progress test-progress">
+                    <div class="progress-bar bg-danger" role="progressbar" 
+                         style="width: {% widthratio answered_questions_count total_questions 100 %}%" 
+                         aria-valuenow="{{ answered_questions_count }}" 
+                         aria-valuemin="0" 
+                         aria-valuemax="{{ total_questions }}"></div>
+                </div>
+                
+                <!-- Question Card -->
+                <div class="question-card">
+                    <div class="question-title">{{ current_question.question_text }}</div>
+                    
+                    <form method="post" action="{% url 'students_testing' %}?test_id={{ test.id }}&question_id={{ current_question.id }}">
+                        {% csrf_token %}
+                        <ul class="answers-list">
+                            {% for answer in answers %}
+                            <li class="answer-item">
+                                <input type="radio" name="answer" id="answer_{{ answer.id }}" value="{{ answer.id }}" 
+                                       class="answer-radio" {% if selected_answer and selected_answer.id == answer.id %}checked{% endif %}>
+                                <label for="answer_{{ answer.id }}" class="answer-label">
+                                    <div>{{ answer.answer_text }}</div>
+                                </label>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        
+                        <div class="navigation-buttons">
+                            {% if prev_question_id %}
+                            <a href="{% url 'students_testing' %}?test_id={{ test.id }}&question_id={{ prev_question_id }}" 
+                               class="nav-button prev">
+                                <i class="bi bi-arrow-left"></i> Попереднє
+                            </a>
+                            {% else %}
+                            <div></div>
+                            {% endif %}
+                            
+                            {% if next_question_id %}
+                            <button type="submit" class="nav-button next">
+                                Наступне <i class="bi bi-arrow-right"></i>
+                            </button>
+                            {% else %}
+                            <button type="submit" class="nav-button finish">
+                                Відповісти і завершити
+                            </button>
+                            {% endif %}
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal for time expiration -->
+    <div class="modal fade" id="timeExpiredModal" tabindex="-1" aria-labelledby="timeExpiredModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="timeExpiredModalLabel">
+                        <i class="bi bi-clock-fill me-2"></i>Час вичерпано!
+                    </h5>
+                </div>
+                <div class="modal-body text-center">
+                    <div class="mb-3">
+                        <i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 3rem;"></i>
+                    </div>
+                    <h6>Час тестування вичерпано!</h6>
+                    <p class="mb-0">Тест буде автоматично завершено та ви будете перенаправлені на сторінку результатів.</p>
+                </div>
+                <div class="modal-footer justify-content-center">
+                    <button type="button" class="btn btn-danger" onclick="goToResults()">
+                        <i class="bi bi-arrow-right me-2"></i>Переглянути результати
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Отримуємо час, що залишився з серверу
+    const timeRemainingSeconds = {{ time_remaining_seconds|default:1800 }};
+    const totalTimeSeconds = 30 * 60; // 30 хвилин
+    const testId = {{ test.id }};
+    
+    let remainingTime = timeRemainingSeconds;
+    const timerElement = document.getElementById('timer');
+    const progressElement = document.getElementById('timer-progress');
+    let isLeavingTestPage = false;
+    let timeExpired = false;
+    
+    // Функція для переходу до результатів
+    window.goToResults = function() {
+        window.location.href = '{% url "tests_results" %}?test_id={{ test.id }}';
+    };
+    
+    // Функція для отримання CSRF токена
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    // Функція для оновлення активності на сервері
+    function updateActivity() {
+        if (timeExpired) return; // Не оновлюємо активність, якщо час вичерпано
+        
+        fetch('{% url "update_test_activity" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCookie('csrftoken'),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: `test_id=${testId}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Синхронізуємо час з сервером
+                if (Math.abs(remainingTime - data.time_remaining) > 5) {
+                    remainingTime = data.time_remaining;
+                }
+            } else {
+                console.error('Помилка оновлення активності:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Помилка запиту:', error);
+        });
+    }
+    
+    // Функція для скидання тесту при виході
+    function leaveTest() {
+        if (timeExpired) return; // Не скидаємо, якщо час вже вичерпано
+        
+        navigator.sendBeacon('{% url "leave_test" %}', new URLSearchParams({
+            'test_id': testId,
+            'csrfmiddlewaretoken': getCookie('csrftoken')
+        }));
+    }
+    
+    // Функція для оновлення відображення таймера
+    function updateTimerDisplay() {
+        // Переконуємося, що час не менше 0
+        if (remainingTime < 0) {
+            remainingTime = 0;
+        }
+        
+        if (remainingTime <= 0 && !timeExpired) {
+            timeExpired = true;
+            // Час вичерпано
+            timerElement.textContent = '00:00';
+            timerElement.className = 'timer-display danger';
+            progressElement.style.width = '0%';
+            progressElement.className = 'progress-bar bg-danger';
+            
+            // Показуємо модальне вікно
+            const modal = new bootstrap.Modal(document.getElementById('timeExpiredModal'));
+            modal.show();
+            
+            return false;
+        }
+        
+        // Обчислюємо хвилини та секунди
+        const minutes = Math.floor(remainingTime / 60);
+        const seconds = remainingTime % 60;
+        
+        // Форматуємо час
+        const formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        timerElement.textContent = formattedTime;
+        
+        // Оновлюємо прогрес-бар
+        const progressPercentage = (remainingTime / totalTimeSeconds) * 100;
+        progressElement.style.width = Math.max(0, progressPercentage) + '%';
+        
+        // Змінюємо кольори залежно від часу, що залишився
+        if (remainingTime <= 300) { // Менше 5 хвилин
+            timerElement.className = 'timer-display danger';
+            progressElement.className = 'progress-bar bg-danger';
+        } else if (remainingTime <= 600) { // Менше 10 хвилин
+            timerElement.className = 'timer-display warning';
+            progressElement.className = 'progress-bar bg-warning';
+        } else {
+            timerElement.className = 'timer-display';
+            progressElement.className = 'progress-bar bg-success';
+        }
+        
+        return true;
+    }
+    
+    // Функція для оновлення таймера
+    function updateTimer() {
+        if (!updateTimerDisplay()) {
+            return; // Зупиняємо таймер, якщо час вичерпано
+        }
+        remainingTime--;
+    }
+    
+    // Відстежуємо кліки по всіх посиланнях
+    document.addEventListener('click', function(e) {
+        if (timeExpired) return; // Не обробляємо кліки, якщо час вичерпано
+        
+        const target = e.target.closest('a');
+        if (target) {
+            const href = target.getAttribute('href');
+            
+            // Перевіряємо, чи це посилання в межах тестування (навігація між питаннями)
+            const isQuestionNavigation = href && (
+                href.includes('/students/testing/') && 
+                href.includes('question_id=') &&
+                href.includes(`test_id=${testId}`)
+            );
+            
+            // Перевіряємо, чи це кнопка завершення тестування
+            const isFinishButton = href && href.includes('/students/testing/results/');
+            
+            // Якщо це НЕ навігація між питаннями і НЕ кнопка завершення, скидаємо тест
+            if (!isQuestionNavigation && !isFinishButton && remainingTime > 0) {
+                e.preventDefault(); // Зупиняємо перехід
+                leaveTest();
+                // Даємо час на відправку beacon, потім переходимо
+                setTimeout(function() {
+                    window.location.href = href;
+                }, 100);
+            }
+        }
+    });
+    
+    // Відстежуємо відправку форм (це нормальна навігація в межах тестування)
+    document.addEventListener('submit', function(e) {
+        // Дозволяємо відправку форми, якщо час ще не вичерпано
+        if (timeExpired) {
+            e.preventDefault(); // Блокуємо відправку форми, якщо час вичерпано
+            const modal = new bootstrap.Modal(document.getElementById('timeExpiredModal'));
+            modal.show();
+            return;
+        }
+        // Форма відправляється нормально - це навігація між питаннями
+    });
+    
+    // Відстежуємо втрату фокусу сторінки (перехід на іншу вкладку)
+    let pageHidden = false;
+    let hiddenTime = null;
+    
+    document.addEventListener('visibilitychange', function() {
+        if (timeExpired) return; // Не обробляємо, якщо час вичерпано
+        
+        if (document.hidden) {
+            pageHidden = true;
+            hiddenTime = Date.now();
+        } else {
+            if (pageHidden && hiddenTime) {
+                const timeHidden = Date.now() - hiddenTime;
+                // Якщо сторінка була прихована більше 30 секунд, скидаємо тест
+                if (timeHidden > 30000 && remainingTime > 0) {
+                    leaveTest();
+                    alert('Тестування було скинуто через тривалий перехід на іншу вкладку.');
+                    window.location.href = '{% url "students_index" %}';
+                }
+            }
+            pageHidden = false;
+            hiddenTime = null;
+        }
+    });
+    
+    // Перевіряємо, чи час ще не вичерпано
+    if (remainingTime > 0) {
+        // Оновлюємо таймер одразу
+        updateTimerDisplay();
+        
+        // Додаємо обробники для елементів навігації в хедері
+        const headerLinks = document.querySelectorAll('.header a, .user-controls a, .sidebar a:not([href*="question_id"]):not([href*="test_id"])');
+        headerLinks.forEach(function(link) {
+            link.addEventListener('click', function(e) {
+                if (remainingTime > 0 && !timeExpired) {
+                    e.preventDefault();
+                    leaveTest();
+                    setTimeout(function() {
+                        window.location.href = link.getAttribute('href');
+                    }, 100);
+                }
+            });
+        });
+        
+        // Запускаємо таймер кожну секунду
+        const timerInterval = setInterval(function() {
+            updateTimer();
+            if (remainingTime <= 0 || timeExpired) {
+                clearInterval(timerInterval);
+            }
+        }, 1000);
+        
+        // Оновлюємо активність кожні 15 секунд (частіше для кращого відстеження)
+        updateActivity(); // Оновлюємо одразу
+        const activityInterval = setInterval(function() {
+            if (remainingTime > 0 && !timeExpired) {
+                updateActivity();
+            } else {
+                clearInterval(activityInterval);
+            }
+        }, 15000);
+        
+        // Оновлюємо активність при кліках та рухах миші
+        let lastActivityUpdate = Date.now();
+        document.addEventListener('click', function() {
+            if (timeExpired) return;
+            const now = Date.now();
+            if (now - lastActivityUpdate > 5000) { // Не частіше ніж раз на 5 секунд
+                updateActivity();
+                lastActivityUpdate = now;
+            }
+        });
+        
+        document.addEventListener('mousemove', function() {
+            if (timeExpired) return;
+            const now = Date.now();
+            if (now - lastActivityUpdate > 15000) { // Не частіше ніж раз на 15 секунд
+                updateActivity();
+                lastActivityUpdate = now;
+            }
+        });
+        
+    } else {
+        // Якщо час вже вичерпано, показуємо модальне вікно
+        timeExpired = true;
+        updateTimerDisplay();
+    }
+});
+</script>
+</body>
+</html>
