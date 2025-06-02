@@ -1,1 +1,2 @@
-web: gunicorn core.wsgi --host 0.0.0.0 --port $PORT
+web: gunicorn core.wsgi:application -c gunicorn.conf.py
+release: python manage.py migrate --noinput
