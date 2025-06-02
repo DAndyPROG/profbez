@@ -49,7 +49,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Для статичних файлів
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
+    # 'django.middleware.common.CommonMiddleware',  # Temporarily disabled for debugging
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'admin_app.middleware.ContractExpirationMiddleware',
@@ -177,7 +177,7 @@ ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'profbezpeka.education@gmail.com')
 # Railway specific settings
 if 'RAILWAY_ENVIRONMENT' in os.environ:
     # Production settings for Railway
-    SECURE_SSL_REDIRECT = True
+    # SECURE_SSL_REDIRECT = True  # Temporarily disabled for debugging
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True

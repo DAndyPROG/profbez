@@ -46,6 +46,11 @@ def ping(request):
     """Simple ping endpoint without database dependency"""
     return HttpResponse("PONG - Django is running", status=200)
 
+@csrf_exempt
+def status(request):
+    """Ultra simple status endpoint for Railway healthcheck"""
+    return HttpResponse("OK", status=200, content_type="text/plain")
+
 def index(request):
     form = IngenerInfoForm()
     context = {'form': form}
