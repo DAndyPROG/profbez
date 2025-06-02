@@ -24,6 +24,10 @@ from django.conf import settings
 from datetime import date, timedelta
 import re
 
+def health_check(request):
+    """Simple health check endpoint for Railway"""
+    return HttpResponse("OK", status=200)
+
 def index(request):
     form = IngenerInfoForm()
     context = {'form': form}
